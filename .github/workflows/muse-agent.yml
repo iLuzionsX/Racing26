@@ -73,8 +73,20 @@ jobs:
             exit 0
           fi
 
-          git apply --check /tmp/muse.patch
-          git apply /tmp/muse.patch
+          # Large model-generated diffs sometimes retain one formatting space before
+          # subsequent git metadata lines. Strip only that impossible metadata prefix;
+          # never touch ordinary source lines. --recount then recomputes inaccurate
+          # hunk line counts while still requiring the actual context to match.
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = '/tmp/muse.patch';
+          let patch = fs.readFileSync(path, 'utf8');
+          patch = patch.replace(/^ (?=(?:diff --git |--- |\+\+\+ |@@ ))/gm, '');
+          fs.writeFileSync(path, patch);
+          NODE
+
+          git apply --check --recount /tmp/muse.patch
+          git apply --recount /tmp/muse.patch
 
           npm install --no-package-lock --no-audit --no-fund
           node scripts/muse-agent/test.mjs
