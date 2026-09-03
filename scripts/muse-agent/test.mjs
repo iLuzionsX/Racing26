@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { isAllowedPath, isContextPath, validatePatchScope } from './policy.mjs';
+import { parseMuseOutput } from './output.mjs';
 import { extractResponseText } from './zen.mjs';
 
 assert.equal(isAllowedPath('src/physics/vehicle/Vehicle.ts'), true);
@@ -67,5 +68,17 @@ assert.match(secret.error, /outside the allowlist/i);
 
 assert.equal(extractResponseText({ output_text: 'hello' }), 'hello');
 assert.equal(extractResponseText({ output: [{ content: [{ type: 'output_text', text: 'hel' }, { type: 'output_text', text: 'lo' }] }] }), 'hello');
+
+const parsedJson = parseMuseOutput(JSON.stringify({ summary: 'ok', patch: safePatch, tests_to_run: ['npm run build'] }));
+assert.equal(parsedJson.summary, 'ok');
+assert.equal(parsedJson.patch, safePatch);
+
+const parsedEnvelope = parseMuseOutput(`MUSE_SUMMARY_BEGIN\nimplemented\nMUSE_SUMMARY_END\nMUSE_PATCH_BEGIN\n${safePatch}MUSE_PATCH_END\nMUSE_TESTS_BEGIN\n["npm run build"]\nMUSE_TESTS_END`);
+assert.equal(parsedEnvelope.summary, 'implemented');
+assert.equal(parsedEnvelope.patch, safePatch.trim());
+assert.deepEqual(parsedEnvelope.tests_to_run, ['npm run build']);
+
+const parsedFenced = parseMuseOutput(`Here is the patch:\n\`\`\`diff\n${safePatch}\`\`\``);
+assert.equal(parsedFenced.patch, safePatch.trim());
 
 console.log('Muse agent policy/client parser tests passed.');
