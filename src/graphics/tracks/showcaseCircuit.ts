@@ -6,7 +6,12 @@ const TRACK_WIDTH_M = 16;
 const TRACK_HALF_WIDTH_M = TRACK_WIDTH_M / 2;
 const CURB_WIDTH_M = 1.25;
 const RUNOFF_WIDTH_M = 13;
+const RUNOFF_BLEND_M = 12;
+const MAX_HINT_STEP_M = 0.6;
+const SPAWN_U = 0.012;
 const PATH_SAMPLES = 720;
+export const SHOWCASE_TRACK_WIDTH_M = TRACK_WIDTH_M;
+export const SHOWCASE_SPAWN_U = SPAWN_U;
 
 export interface ShowcaseSpawn {
   x: number;
@@ -41,44 +46,55 @@ function gaussian(u: number, center: number, width: number): number {
 }
 
 function bankingAt(u: number): number {
-  // Positive roll raises the left edge (+X in the vehicle convention).
-  const bowl = 0.24 * gaussian(u, 0.24, 0.055);
-  const crest = 0.08 * gaussian(u, 0.39, 0.045);
-  const hairpin = -0.12 * gaussian(u, 0.55, 0.04);
-  const essesWindow = gaussian(u, 0.72, 0.09);
-  const esses = Math.sin((u - 0.64) * Math.PI * 10) * 0.075 * essesWindow;
-  return bowl + crest + hairpin + esses;
+  // Positive roll raises the left edge. Progressive GP values only.
+  // Max ~0.12 rad (6.9 deg), transitions over ~150-220 m, no high-freq esses.
+  const bowl = 0.12 * gaussian(u, 0.26, 0.085);
+  const crest = 0.04 * gaussian(u, 0.40, 0.06);
+  const dip = -0.06 * gaussian(u, 0.56, 0.06);
+  const essesWindow = gaussian(u, 0.74, 0.10);
+  const esses = Math.sin((u - 0.66) * Math.PI * 4) * 0.03 * essesWindow;
+  return bowl + crest + dip + esses;
 }
 
-class ShowcaseTrackPath {
+export function showcaseBankingAt(u: number): number {
+  return bankingAt(u);
+}
+
+export function wrapTrackDeltaU(a: number, b: number): number {
+  let d = a - b;
+  if (d > 0.5) d -= 1;
+  if (d < -0.5) d += 1;
+  return d;
+}
+
+export class ShowcaseTrackPath {
   public readonly curve: THREE.CatmullRomCurve3;
   public readonly samples: TrackSample[] = [];
   public readonly lengthM: number;
 
   constructor() {
-    // The later elevated east-west return crosses the opening northbound straight
-    // near z=-230, creating the signature bridge/underpass without a second route.
+    // Single-crossing GP loop. Lower main straight y~2 at z~-360/-140 is crossed
+    // once by elevated east-west bridge y~14 at z=-220. No extra zig-zag loop.
+    // Grades <6.5%, min radius target >35 m, clearance ~11-12 m.
     const raw: Array<[number, number, number]> = [
       [0, 2, -360],
       [0, 2, -250],
-      [0, 5, -140],
-      [80, 12, -30],
-      [220, 20, 50],
-      [360, 16, 20],
-      [390, 8, 140],
-      [310, 6, 280],
-      [150, 10, 350],
-      [-20, 18, 300],
-      [-160, 26, 180],
-      [-300, 32, 80],
-      [-360, 24, -60],
-      [-300, 14, -190],
-      [-180, 10, -300],
-      [-120, 20, -230],
-      [120, 24, -230],
-      [220, 18, -150],
-      [120, 10, -80],
-      [20, 4, -160],
+      [2, 3, -140],
+      [70, 5, -40],
+      [200, 8, 30],
+      [320, 10, 120],
+      [300, 11, 250],
+      [180, 13, 340],
+      [20, 14, 360],
+      [-140, 16, 320],
+      [-260, 15, 220],
+      [-320, 12, 80],
+      [-280, 8, -60],
+      [-200, 6, -150],
+      [-80, 9, -220],
+      [80, 14, -220],
+      [200, 12, -260],
+      [140, 6, -340],
     ];
 
     this.curve = new THREE.CatmullRomCurve3(
@@ -150,48 +166,16 @@ class ShowcaseTrackPath {
     };
   }
 
-  public closest(x: number, z: number, elevationHint: number): { sample: TrackSample; lateralOffset: number } {
-    const coarse: Array<{ index: number; d2: number }> = [];
-    for (let i = 0; i < PATH_SAMPLES; i += 3) {
-      const s = this.samples[i];
-      const dx = x - s.center.x;
-      const dz = z - s.center.z;
-      coarse.push({ index: i, d2: dx * dx + dz * dz });
-    }
-    coarse.sort((a, b) => a.d2 - b.d2);
+  public closest(x: number, z: number, elevationHint: number, lastU?: number): { sample: TrackSample; lateralOffset: number } {
+    return selectShowcaseSample(this, x, z, elevationHint, lastU ?? this.spawnU());
+  }
 
-    // Keep several XZ candidates because the circuit intentionally crosses itself.
-    // Elevation continuity resolves which deck the car is currently driving on.
-    const candidateIndices = new Set<number>();
-    for (const c of coarse.slice(0, 8)) {
-      for (let k = -6; k <= 6; k++) {
-        candidateIndices.add((c.index + k + PATH_SAMPLES) % PATH_SAMPLES);
-      }
-    }
-
-    let best = this.samples[0];
-    let bestScore = Infinity;
-    for (const index of candidateIndices) {
-      const s = this.samples[index];
-      const dx = x - s.center.x;
-      const dz = z - s.center.z;
-      const d2 = dx * dx + dz * dz;
-      const elevationPenalty = Math.pow((s.center.y - elevationHint) * 1.45, 2);
-      const score = d2 + elevationPenalty;
-      if (score < bestScore) {
-        bestScore = score;
-        best = s;
-      }
-    }
-
-    const dx = x - best.center.x;
-    const dz = z - best.center.z;
-    const lateralOffset = dx * best.lateral.x + dz * best.lateral.z;
-    return { sample: best, lateralOffset };
+  public spawnU(): number {
+    return SPAWN_U;
   }
 
   public spawn(): ShowcaseSpawn {
-    const s = this.sampleAt(0.012);
+    const s = this.sampleAt(SPAWN_U);
     return {
       x: s.center.x,
       z: s.center.z,
@@ -201,21 +185,102 @@ class ShowcaseTrackPath {
   }
 }
 
+export function selectShowcaseSample(
+  path: ShowcaseTrackPath,
+  x: number,
+  z: number,
+  elevationHint: number,
+  lastU: number
+): { sample: TrackSample; lateralOffset: number } {
+  const coarse: Array<{ index: number; d2: number }> = [];
+  for (let i = 0; i < PATH_SAMPLES; i += 3) {
+    const s = path.samples[i];
+    const dx = x - s.center.x;
+    const dz = z - s.center.z;
+    coarse.push({ index: i, d2: dx * dx + dz * dz });
+  }
+  coarse.sort((a, b) => a.d2 - b.d2);
+  const candidateIndices = new Set<number>();
+  for (const c of coarse.slice(0, 8)) {
+    for (let k = -6; k <= 6; k++) candidateIndices.add((c.index + k + PATH_SAMPLES) % PATH_SAMPLES);
+  }
+  const hint = Number.isFinite(elevationHint) ? elevationHint : path.spawn().elevation;
+  const refU = Number.isFinite(lastU) ? lastU : SPAWN_U;
+  let best = path.samples[0];
+  let bestScore = Infinity;
+  for (const index of candidateIndices) {
+    const s = path.samples[index];
+    const dx = x - s.center.x;
+    const dz = z - s.center.z;
+    const d2 = dx * dx + dz * dz;
+    const elevationPenalty = Math.pow((s.center.y - hint) * 1.2, 2);
+    const alongM = wrapTrackDeltaU(s.u, refU) * path.lengthM;
+    const continuityPenalty = Math.pow(alongM * 0.35, 2);
+    const score = d2 + elevationPenalty + continuityPenalty;
+    if (score < bestScore) { bestScore = score; best = s; }
+  }
+  const dx = x - best.center.x;
+  const dz = z - best.center.z;
+  const lateralOffset = dx * best.lateral.x + dz * best.lateral.z;
+  return { sample: best, lateralOffset };
+}
+
+export function estimateShowcaseMinRadius(path: ShowcaseTrackPath, steps = 360): { minRadiusM: number; meanRadiusM: number } {
+  let min = Infinity;
+  let sum = 0;
+  for (let i = 0; i < steps; i++) {
+    const a = path.sampleAt(i / steps);
+    const b = path.sampleAt((i + 1) / steps);
+    const ax = a.tangent.x; const az = a.tangent.z;
+    const bx = b.tangent.x; const bz = b.tangent.z;
+    const angle = Math.acos(Math.max(-1, Math.min(1, ax * bx + az * bz)));
+    const dist = a.center.distanceTo(b.center);
+    if (angle > 1e-5 && dist > 1e-6) {
+      const r = dist / angle;
+      min = Math.min(min, r);
+      sum += r;
+    }
+  }
+  return { minRadiusM: min, meanRadiusM: sum / steps };
+}
+
 const SHOWCASE_PATH = new ShowcaseTrackPath();
 
 export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
   private elevationHint: number;
+  private lastU: number;
 
   constructor(private readonly path: ShowcaseTrackPath = SHOWCASE_PATH) {
     this.elevationHint = path.spawn().elevation;
+    this.lastU = path.spawnU();
   }
 
   public resetHint(elevation: number): void {
     if (Number.isFinite(elevation)) this.elevationHint = elevation;
+    this.lastU = this.path.spawnU();
   }
 
-  public sampleSurface(x: number, z: number): SurfaceSample {
-    const hit = this.path.closest(x, z, this.elevationHint);
+  public resetHintTo(elevation: number, u: number): void {
+    if (Number.isFinite(elevation)) this.elevationHint = elevation;
+    if (Number.isFinite(u)) this.lastU = ((u % 1) + 1) % 1;
+  }
+
+  public getHint(): number { return this.elevationHint; }
+  public getLastU(): number { return this.lastU; }
+
+  public sampleSurfaceWithHint(x: number, z: number, hintElevation: number, hintU: number): SurfaceSample {
+    const savedHint = this.elevationHint;
+    const savedU = this.lastU;
+    this.elevationHint = hintElevation;
+    this.lastU = hintU;
+    const out = this.sampleSurfaceNoCommit(x, z);
+    this.elevationHint = savedHint;
+    this.lastU = savedU;
+    return out;
+  }
+
+  private sampleSurfaceNoCommit(x: number, z: number): SurfaceSample {
+    const hit = selectShowcaseSample(this.path, x, z, this.elevationHint, this.lastU);
     const s = hit.sample;
     const lateral = hit.lateralOffset;
     const absLateral = Math.abs(lateral);
@@ -242,23 +307,24 @@ export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
     });
 
     if (absLateral <= TRACK_HALF_WIDTH_M) {
-      this.elevationHint = roadPoint.y;
       return sample(roadPoint.y, absLateral < 3.4 ? 'racing_line' : 'asphalt', 1.08, 0.016, false);
     }
 
     if (absLateral <= TRACK_HALF_WIDTH_M + CURB_WIDTH_M) {
-      this.elevationHint = roadPoint.y;
       return sample(roadPoint.y + 0.025, 'kerb', 0.88, 0.024, true);
     }
 
     if (absLateral <= TRACK_HALF_WIDTH_M + RUNOFF_WIDTH_M) {
       const runoffDrop = Math.min(0.35, (absLateral - TRACK_HALF_WIDTH_M) * 0.018);
-      this.elevationHint = roadPoint.y - runoffDrop;
       return sample(roadPoint.y - runoffDrop, 'marbles', 0.72, 0.038, false);
     }
 
-    // Beyond the engineered shelf, the world floor is intentionally low-grip and flat.
-    // Elevated bridge sections therefore remain real drop-offs instead of invisible roads.
+    if (absLateral <= TRACK_HALF_WIDTH_M + RUNOFF_WIDTH_M + RUNOFF_BLEND_M) {
+      const edgeElev = roadPoint.y - 0.35;
+      const t = (absLateral - TRACK_HALF_WIDTH_M - RUNOFF_WIDTH_M) / RUNOFF_BLEND_M;
+      const elevation = edgeElev + (0 - edgeElev) * t * t * (3 - 2 * t);
+      return sample(elevation, 'gravel', 0.52, 0.08, false, new THREE.Vector3(0, 1, 0));
+    }
     return {
       elevation: 0,
       normal: { x: 0, y: 1, z: 0 },
@@ -270,6 +336,28 @@ export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
       wetness: 0,
       isKerbRumble: false,
     };
+  }
+
+  public sampleSurface(x: number, z: number): SurfaceSample {
+    const hintSnapshot = this.elevationHint;
+    const lastUSnapshot = this.lastU;
+    const hit = selectShowcaseSample(this.path, x, z, hintSnapshot, lastUSnapshot);
+    const absLateral = Math.abs(hit.lateralOffset);
+    const out = this.sampleSurfaceNoCommit(x, z);
+    // Rate-limited commit only for engineered shelf. All 4 wheels in one frame
+    // share nearly identical snapshots, so they select the same deck. A 12 m deck
+    // jump needs ~20 queries to migrate, while true grades (<0.1 m per query)
+    // track immediately. Off-shelf queries never drag the hint.
+    if (absLateral <= TRACK_HALF_WIDTH_M + RUNOFF_WIDTH_M) {
+      const s = hit.sample;
+      const roadY = s.center.clone().addScaledVector(s.bankedLateral, hit.lateralOffset).y;
+      const runoffDrop = absLateral <= TRACK_HALF_WIDTH_M ? 0 : Math.min(0.35, (absLateral - TRACK_HALF_WIDTH_M) * 0.018);
+      const targetY = roadY - runoffDrop;
+      const delta = targetY - this.elevationHint;
+      this.elevationHint += THREE.MathUtils.clamp(delta, -MAX_HINT_STEP_M, MAX_HINT_STEP_M);
+      this.lastU = hit.sample.u;
+    }
+    return out;
   }
 }
 
@@ -568,7 +656,7 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   let supportIndex = 0;
   for (let i = 0; i < PATH_SAMPLES && supportIndex < 45; i += 5) {
     const s = path.samples[i];
-    if (s.center.y < 16 || s.center.z < -275 || s.center.z > -185) continue;
+    if (s.center.y < 8 || s.center.z < -270 || s.center.z > -170) continue;
     const height = Math.max(2, s.center.y);
     matrix.compose(
       new THREE.Vector3(s.center.x, height / 2, s.center.z),
