@@ -1,0 +1,115 @@
+name: Muse Spark delegated agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Focused engineering objective for the BMW M5 driving lab
+        required: true
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - .github/muse-task.txt
+  pull_request:
+    types:
+      - opened
+      - synchronize
+    paths:
+      - .github/muse-task.txt
+
+permissions:
+  contents: write
+
+jobs:
+  delegate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test Muse guardrails
+        run: node scripts/muse-agent/test.mjs
+
+      - name: Run Muse Spark delegation
+        env:
+          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
+          DISPATCH_TASK: ${{ github.event.inputs.task }}
+        run: |
+          MUSE_TASK="$DISPATCH_TASK"
+          if [ -z "$MUSE_TASK" ]; then
+            MUSE_TASK="$(cat .github/muse-task.txt)"
+          fi
+          node scripts/muse-agent/run.mjs --task "$MUSE_TASK"
+
+      - name: Materialize and validate Muse patch
+        if: success()
+        env:
+          MUSE_BRANCH: muse-review-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          artifact="$(ls -1t .muse/artifacts/*.json 2>/dev/null | head -n 1)"
+          if [ -z "$artifact" ]; then
+            echo "No Muse artifact found; nothing to materialize."
+            exit 0
+          fi
+
+          node - "$artifact" <<'NODE' > /tmp/muse.patch
+          const fs = require('node:fs');
+          const artifactPath = process.argv[2];
+          const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+          process.stdout.write(artifact?.result?.patch || '');
+          NODE
+
+          if [ ! -s /tmp/muse.patch ]; then
+            echo "Muse returned no patch; leaving this run advisory-only."
+            exit 0
+          fi
+
+          git apply --check /tmp/muse.patch
+          git apply /tmp/muse.patch
+
+          npm install --no-package-lock --no-audit --no-fund
+          node scripts/muse-agent/test.mjs
+          npm run lint
+          npm run test:conventions
+          npm run test:m5-validation:strict
+          npm run build
+
+          git config user.name "muse-review-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git switch -c "$MUSE_BRANCH"
+          git add -A -- src public index.html
+          if git diff --cached --quiet; then
+            echo "Muse patch produced no repository changes."
+            exit 0
+          fi
+          git commit -m "Muse review ${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/$MUSE_BRANCH"
+          echo "Review branch: $MUSE_BRANCH"
+
+      - name: Print Muse review artifact
+        if: always()
+        run: |
+          echo "===== MUSE_ARTIFACT_BEGIN ====="
+          for file in .muse/artifacts/*.json; do
+            [ -f "$file" ] || continue
+            cat "$file"
+          done
+          echo "===== MUSE_ARTIFACT_END ====="
+
+      - name: Upload Muse review artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-spark-result
+          path: .muse/artifacts/
+          if-no-files-found: warn
+          retention-days: 7
