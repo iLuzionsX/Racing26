@@ -224,16 +224,28 @@ export default function App() {
     resizeObserver.observe(container);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') {
+        keysDownRef.current = {};
+        setActiveKeys({});
+        digitalSteerInputRef.current = 0;
+        mouseSteerInputRef.current = 0;
+        touchInputsRef.current.throttle = false;
+        touchInputsRef.current.brake = false;
+        touchInputsRef.current.steerLeft = false;
+        touchInputsRef.current.steerRight = false;
+        touchInputsRef.current.handbrake = false;
+        setDrivingEnvironment(drivingEnvironmentRef.current);
+        isStartMenuOpenRef.current = true;
+        setIsStartMenuOpen(true);
+        return;
+      }
+      if (isStartMenuOpenRef.current) return;
       keysDownRef.current[e.code] = true;
       setActiveKeys({ ...keysDownRef.current });
 
       globalAudio.init();
 
-      if (e.code === 'Escape') {
-        setDrivingEnvironment(drivingEnvironmentRef.current);
-        isStartMenuOpenRef.current = true;
-        setIsStartMenuOpen(true);
-      } else if (e.code === 'KeyC') {
+      if (e.code === 'KeyC') {
         const next = cameraController.nextMode();
         setCameraMode(next);
       } else if (e.code === 'KeyR') {
@@ -276,6 +288,7 @@ export default function App() {
     };
 
     const handlePointerMove = (e: PointerEvent) => {
+      if (isStartMenuOpenRef.current) return;
       if (steeringInputModeRef.current !== 'mouse') return;
       const rect = canvas.getBoundingClientRect();
       mouseSteerInputRef.current = mouseSteeringFromClientX(e.clientX, rect.left, rect.width);
@@ -340,17 +353,22 @@ export default function App() {
       const shiftUp = !inputBlocked && (keys['ShiftLeft'] || keys['ShiftRight']);
       const shiftDown = !inputBlocked && (keys['ControlLeft'] || keys['ControlRight']);
 
-      const state = physicsEngine.update(deltaTime, {
-        throttle: throttleInput,
-        brake: brakeInput,
-        steer: steerInput,
-        handbrake: isHandbrake,
-        shiftUp,
-        shiftDown,
-      });
+      // Freeze the simulation while the start menu is visible. Do not advance
+      // VehiclePhysicsEngine with zero inputs behind the menu.
+      let state = physicsEngine.state;
+      if (!inputBlocked) {
+        state = physicsEngine.update(deltaTime, {
+          throttle: throttleInput,
+          brake: brakeInput,
+          steer: steerInput,
+          handbrake: isHandbrake,
+          shiftUp,
+          shiftDown,
+        });
+      }
 
       carRenderer.update(state, physicsEngine.config);
-      if (drivingEnvironmentRef.current === 'plane') {
+      if (drivingEnvironmentRef.current === 'plane' && !inputBlocked) {
         envManager.update(deltaTime, state.x, state.z, state.yaw, state.speedMs, state.wheels);
       }
       cameraController.update(deltaTime, state);
@@ -520,6 +538,7 @@ export default function App() {
   };
 
   const handleTouchInput = (action: 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake', active: boolean) => {
+    if (isStartMenuOpenRef.current) return;
     globalAudio.init();
     touchInputsRef.current[action] = active;
   };
@@ -584,6 +603,7 @@ export default function App() {
       provingGroundObjectsRef.current.forEach((object) => { object.visible = true; });
       scene.background = new THREE.Color(0x94a3b8);
       scene.fog = new THREE.FogExp2(0x94a3b8, 0.0018);
+      envManagerRef.current?.clearSkidMarks();
       resetVehicleForActiveEnvironment(engine);
       isStartMenuOpenRef.current = false;
       setIsStartMenuOpen(false);
@@ -602,6 +622,7 @@ export default function App() {
       scene.fog = new THREE.FogExp2(0x7897aa, 0.00135);
       drivingEnvironmentRef.current = 'showcase';
       setPhysicsSurface(engine, runtime.surfaceProvider);
+      envManagerRef.current?.clearSkidMarks();
       resetVehicleForActiveEnvironment(engine);
       isStartMenuOpenRef.current = false;
       setIsStartMenuOpen(false);
@@ -611,6 +632,9 @@ export default function App() {
       setDrivingEnvironment('plane');
       setPhysicsSurface(engine, provingSurfaceProviderRef.current);
       provingGroundObjectsRef.current.forEach((object) => { object.visible = true; });
+      scene.background = new THREE.Color(0x94a3b8);
+      scene.fog = new THREE.FogExp2(0x94a3b8, 0.0018);
+      envManagerRef.current?.clearSkidMarks();
       resetVehicleForActiveEnvironment(engine);
     } finally {
       setIsTrackLoading(false);
