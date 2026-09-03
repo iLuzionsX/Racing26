@@ -1,1 +1,27 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+IMPLEMENT THE FEATURE END-TO-END. This is the final integration pass for the selectable insane race track. Build on the strongest prior Showcase Circuit direction, but inspect the CURRENT repository snapshot and produce an exact patch against it.
+
+Non-negotiable behavior:
+- The current proving-ground/empty plane is the DEFAULT launch and default spawn. Preserve its visuals, spawn at 0/0/0, physics, validation behavior, and performance.
+- On startup show a clean start menu with Plane selected by default and an opt-in "Showcase Circuit" / Race Track choice. The user explicitly chooses before track content is created.
+- Prefer dynamic import/lazy creation for track code so plane mode does not construct the track scene. Track content must cleanly dispose when appropriate.
+- Track selection resets the car onto a correct grid position AND correct elevation + heading. VehiclePhysicsEngine.reset(x,z,yaw) only sets chassis CG to its normal flat-ground height, so after track reset explicitly place the vehicle CG at trackElevation + config.centerOfGravityHeight before the first physics step, then ensure suspension state starts cleanly.
+- When swapping surface providers, update BOTH physicsEngine.surfaceProvider (used by app-state hydration/sampleTerrainAndSurface) and physicsEngine.simulation.vehicle.surfaceProvider (used by actual vehicle contact physics). Do not edit physics equations or validation code.
+- Environment skid/contact visuals must sample the active surface elevation rather than remain hardcoded at Y=0; do this with the smallest clean environment API change while leaving proving-ground behavior identical.
+- R key and UI reset must reset to the current mode's spawn.
+- Keep current mobile/keyboard/mouse controls and HUD intact.
+
+Track creative direction — OUTRAGEOUS MODERN SHOWCASE CIRCUIT:
+A serious, memorable M5 circuit with huge elevation change, uphill crest, a banked high-speed bowl, heavy-braking landmark hairpin, fast esses, canyon/retaining-wall sector, covered tunnel, dramatic bridge/overpass crossover, downhill switchback/corkscrew feel, long main straight, start/finish grid/gantry, pit-lane cues, curbs, runoff, barriers, braking boards, marshal/light structures, grandstands/paddock silhouettes, skyline/mountains/trees/rocks. Procedural Three.js only; no fragile external assets. Use reusable geometry/materials and instancing. Asphalt ribbon must be continuous, wide, readable, and actually drivable. At XZ crossovers, surface lookup must resolve the correct deck by continuity/elevation.
+
+Engineering constraints:
+- Respect AGENTS.md, PHYSICS_CONVENTIONS.md, M5_VALIDATION.md.
+- No src/physics equation/tuning changes. No validation overrides.
+- Use ISurfaceProvider-compatible track surface with correct SurfaceSample fields and existing SurfaceType values.
+- Banking/elevation normals must be physically sensible and deterministic.
+- Keep draw calls reasonable for mobile/web.
+- Avoid Math.random for permanent generated geometry/textures where deterministic seeded randomness is easy.
+- Include exact App.tsx wiring in the patch; do NOT omit it.
+- Produce a standard unified git diff against the supplied snapshot. Be conservative with hunk context so it applies cleanly.
+- The patch must pass: node scripts/muse-agent/test.mjs, npm run test:conventions, npm run test:m5-validation:strict, npm run build.
+
+Return the complete implementation patch, not an audit or plan.
