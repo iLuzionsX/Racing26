@@ -1,1 +1,19 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+TEST AND FIX THE SHOWCASE CIRCUIT VISUAL SCENE AS A COHERENT RACE VENUE. The user has driven the current implementation and reports that things are all over the place. Treat this as a scene-layout QA/fix pass, not a compile audit.
+
+Focus on src/graphics/tracks/showcaseCircuit.ts visual placement and trackside dressing. Do not alter BMW M5 vehicle physics equations/tuning/validation code. Preserve the original plane mode exactly.
+
+Inspect every permanent scene element relative to the route: barriers, kerbs, runoff, pit lane, pit wall, paddock, grandstands, gantries, braking boards, landmark tower, tunnel beams/posts, canyon rocks, bridge supports, trees, and mountains. Identify anything that intersects the asphalt/runoff, floats, sinks, blocks sightlines, spans the wrong local axis, is placed using hard-coded world coordinates that do not match the actual track, appears inside another structure, or creates obvious random clutter.
+
+Hard acceptance criteria:
+- Keep a clear racing corridor: asphalt plus at least ~3 m beyond track edge should never be occupied by scenery/barrier geometry except intentional kerbs and correctly aligned guardrails.
+- Barriers must follow the route and remain outside usable runoff; their height/orientation should be believable.
+- Kerbs should align to the actual local tangent/bank and not alternate chaotically across the road.
+- Pit lane/paddock/grandstand must be anchored to a known start-straight sample and oriented from the local tangent/lateral basis, not arbitrary world axes.
+- Gantries/tunnel structures must span perpendicular to the driving direction and provide comfortable vehicle clearance.
+- Bridge supports must never intrude on either deck's racing corridor or underpass clearance.
+- Rocks/trees must use exclusion distance from track/runoff, and the canyon should read as deliberate rather than noise.
+- Reduce or remove decorative elements if placement cannot be made robust. Coherence beats object count.
+- Preserve strong spectacle with fewer, better landmarks.
+- Prefer route-relative placement helpers so future control-point changes do not scatter objects.
+
+Produce a concrete patch that makes the scene clean, legible, and consistent. Include any deterministic geometry/exclusion checks you can reasonably add within allowed source files. Required gates remain npm run test:conventions, npm run test:m5-validation:strict, npm run build.
