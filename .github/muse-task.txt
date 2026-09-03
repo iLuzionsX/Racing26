@@ -1,1 +1,26 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+IMPLEMENT THIS FEATURE END-TO-END, NOT JUST AN AUDIT.
+
+Build an insane selectable race-track environment for the BMW M5 driving lab, as a complete self-contained implementation from current main.
+
+Non-negotiable requirements:
+- DEFAULT launch/spawn stays the current empty plane. The new track is opt-in from the start menu only.
+- Add a clean environment/mode selector in the start menu and a correct track-specific spawn when selected.
+- Isolate/unload track content when plane mode is selected.
+- Preserve current vehicle physics; obey AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md.
+- Keep build + strict validation gates passing.
+
+Creative direction B — outrageous modern showcase circuit:
+Design a visually unforgettable fictional circuit that still drives like a serious performance-car track: huge elevation changes, an uphill crest, banked high-speed bowl, skyline-scale overpass, hairpin around a landmark, canyon/coastal-style retaining walls, sweeping esses, a tunnel/covered section, bridge crossover, dramatic start/finish straight, high-quality curbs/runoff/barriers, marshal/braking markers, lighting/gantries, sparse grandstands and structural silhouettes. Think premium manufacturer proving-ground meets world-class street/GP spectacle, but generated procedurally with Three.js and no external model dependency.
+
+Technical expectations:
+- Inspect existing code first and work with its ground/raycast/render architecture.
+- Create modular reusable track geometry and environment code, not one giant App.tsx blob.
+- Generate a continuous, wide, clearly driveable asphalt ribbon that follows route and elevation; prevent obvious gaps/twists at sharp bends.
+- Make scene dressing efficient with shared geometry/materials/instancing where useful.
+- Plane mode must remain fast and visually unchanged.
+- Track mode should have a deliberate start grid and orientation.
+- Do not invent a new physics engine; make collision/ground support compatible with the existing one.
+- Keep mobile/web performance in mind.
+- Patch must build and validate independently.
+
+Return the complete code patch implementing the feature.
