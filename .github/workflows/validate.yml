@@ -1,0 +1,54 @@
+name: Validate Racing26
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Muse guardrail self-test
+        run: node scripts/muse-agent/test.mjs
+
+      - name: Physics convention guardrails
+        run: npm run test:conventions
+
+      - name: Low-speed braking regression
+        run: npm run test:low-speed-brake
+
+      - name: Low-speed cornering regression
+        run: npm run test:cornering
+
+      - name: Suspension regression
+        run: npm run test:suspension
+
+      - name: Tire-model regression
+        run: npm run test:tire
+
+      - name: Hardened BMW M5 validation
+        run: npm run test:m5-validation:strict
+
+      - name: Production build
+        run: npm run build -- --base=/Racing26/
