@@ -1,1 +1,25 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+IMPLEMENT THIS FEATURE END-TO-END, NOT JUST AN AUDIT.
+
+Build an insane selectable race-track environment for the BMW M5 driving lab. Treat this as a complete self-contained implementation from the current main branch.
+
+Hard product requirements:
+- The app's DEFAULT launch/spawn must remain the existing empty/default plane exactly as the normal experience.
+- Add a start-menu choice that lets the user explicitly load the new race track. Do not auto-load the track.
+- The track must be unloadable/isolated so choosing the plane does not pay for or visually inherit the track.
+- Do not change vehicle physics unless absolutely required; AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md remain hard constraints.
+- Keep npm run build, npm run test:conventions, and npm run test:m5-validation:strict passing.
+
+Creative direction A — cinematic mountain GP circuit:
+Create a spectacular procedural Three.js race track with meaningful elevation, fast sweepers, a tight technical sector, a dramatic corkscrew/downhill section, one bridge/underpass crossover, a tunnel or rock-cut moment, a long main straight, curbs, runoff, barriers/guardrails, braking boards, start/finish gantry, pit-lane visual language, grandstand/paddock silhouettes, trackside lighting/details, and distant terrain/rocks/trees. It should feel intentional and driveable at M5 speeds rather than like random geometry. Use efficient reusable geometry/instancing/materials and no fragile external assets.
+
+Implementation expectations:
+- Inspect current architecture before editing.
+- Prefer a modular track/world component or builder rather than bloating App.tsx.
+- Integrate a clear Plane / Race Track (or equivalent) environment selector into the existing start menu without making the UI worse.
+- Spawn the car on a sane grid position/orientation when the track is selected; preserve current plane spawn behavior otherwise.
+- Track surface should visually read as asphalt with lane/edge treatment and correctly follow the route/elevation.
+- Add lightweight collision/driveability support using the project's existing ground/raycast assumptions rather than replacing the physics engine.
+- Avoid huge draw-call explosions; target mobile/web viability.
+- Make the patch compile and validate on its own branch.
+
+Return a concrete code patch that implements the whole feature.
