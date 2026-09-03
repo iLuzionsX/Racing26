@@ -1,1 +1,25 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+IMPLEMENT THIS FEATURE END-TO-END, NOT JUST AN AUDIT.
+
+Create a complete selectable race-track mode for the BMW M5 driving lab from current main.
+
+Hard requirements:
+- DEFAULT app launch/spawn remains the existing empty plane. Do not auto-load the track.
+- Add an explicit start-menu environment selection so the user can choose Plane or the new Race Track.
+- Track scene content must be isolated so plane mode remains visually/performance-wise clean.
+- Preserve vehicle physics and all AGENTS.md / PHYSICS_CONVENTIONS.md / M5_VALIDATION.md invariants.
+- Keep npm run build, npm run test:conventions, and npm run test:m5-validation:strict passing.
+
+Creative direction C — driver's circuit first, spectacle second:
+Build an 'insane' fictional circuit that is genuinely fun to lap repeatedly in a heavy high-power M5: distinct sectors, memorable corner identities, proper width, readable apexes, progressive radius turns, at least one long acceleration zone, one heavy-braking hairpin, high-speed esses, elevation compression/crest, a Laguna-style corkscrew or downhill switchback, bridge/underpass crossover, pit/start straight, curbs, runoff, guardrails/tire walls, braking markers, start lights/gantries, minimal but convincing grandstands/paddock buildings, terrain and trackside vegetation/rocks. Make every landmark help navigation.
+
+Engineering expectations:
+- Inspect current architecture and current ground/raycast assumptions first.
+- Prefer a modular TrackEnvironment/world builder and clean integration into the existing start-menu flow.
+- Continuous procedural asphalt surface with sensible normals/elevation and no obvious self-intersection artifacts where avoidable.
+- Track-specific car spawn/grid position + heading; exact current plane spawn remains unchanged.
+- Efficient WebGL: reuse materials/geometries and use instancing or batching for repeated dressing.
+- Do not replace the physics engine or destabilize M5 validation.
+- Include robust cleanup/disposal when switching back to plane mode if architecture supports switching at runtime.
+- Patch must compile and validate independently.
+
+Return the concrete complete code patch implementing the feature.
