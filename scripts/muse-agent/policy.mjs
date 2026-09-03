@@ -2,8 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const PATCH_ROOTS = ['src', 'public'];
-const PATCH_EXACT = new Set(['index.html', 'package.json', 'vite.config.ts', 'tsconfig.json']);
-const CONTEXT_EXACT = new Set(['AGENTS.md', 'M5_VALIDATION.md', 'PHYSICS_CONVENTIONS.md', 'README.md', 'package.json']);
+const PATCH_EXACT = new Set(['index.html']);
+const CONTEXT_EXACT = new Set([
+  'AGENTS.md',
+  'M5_VALIDATION.md',
+  'PHYSICS_CONVENTIONS.md',
+  'README.md',
+  'package.json',
+  'vite.config.ts',
+  'tsconfig.json',
+]);
 const TEXT_EXTENSIONS = new Set(['.css', '.html', '.js', '.json', '.jsx', '.md', '.mjs', '.ts', '.tsx', '.txt']);
 const DENIED_SEGMENTS = new Set(['.git', '.github', '.muse', '.agents', 'artifacts', 'dist', 'node_modules']);
 const MAX_FILE_BYTES = 180_000;
@@ -104,7 +112,7 @@ export function collectContext(rootDir) {
     if (shouldInclude(repoPath, stat)) files.push({ path: repoPath, bytes: stat.size, content: fs.readFileSync(absolute, 'utf8') });
   }
 
-  const priority = new Map(['AGENTS.md', 'PHYSICS_CONVENTIONS.md', 'M5_VALIDATION.md', 'package.json'].map((p, i) => [p, i]));
+  const priority = new Map(['AGENTS.md', 'PHYSICS_CONVENTIONS.md', 'M5_VALIDATION.md', 'package.json', 'vite.config.ts', 'tsconfig.json'].map((p, i) => [p, i]));
   files.sort((a, b) => (priority.get(a.path) ?? 100) - (priority.get(b.path) ?? 100) || a.path.localeCompare(b.path));
 
   const selected = [];
