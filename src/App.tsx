@@ -156,6 +156,9 @@ export default function App() {
       // reset() deliberately assumes flat proving-ground height. Track mode raises
       // the physical CG after reset, before suspension initializes its wheel hubs.
       engine.simulation.vehicle.rigidBody.position.y = spawn.elevation + engine.config.centerOfGravityHeight;
+      // Ensure suspension starts cleanly at the elevated grid pose before first step.
+      engine.simulation.vehicle.suspension.reset();
+      (engine.simulation as any).suspensionKinematics?.reset?.();
     } else {
       engine.reset(0, 0, 0);
     }
@@ -350,9 +353,9 @@ export default function App() {
       });
 
       carRenderer.update(state, physicsEngine.config);
-      if (drivingEnvironmentRef.current === 'plane') {
-        envManager.update(deltaTime, state.x, state.z, state.yaw, state.speedMs, state.wheels);
-      }
+      // Skid/smoke/contact visuals run in both modes; EnvironmentManager samples
+      // the active surface elevation (0 on plane, track elevation on circuit).
+      envManager.update(deltaTime, state.x, state.z, state.yaw, state.speedMs, state.wheels);
       cameraController.update(deltaTime, state);
 
       const maxSkid = Math.max(...state.wheels.map((w) => (w.isSkidding ? w.skidIntensity : 0)));
@@ -577,6 +580,7 @@ export default function App() {
     if (drivingEnvironment === 'plane') {
       drivingEnvironmentRef.current = 'plane';
       setPhysicsSurface(engine, provingSurfaceProviderRef.current);
+      envManagerRef.current?.setSurfaceProvider(provingSurfaceProviderRef.current);
       if (trackRuntimeRef.current) {
         trackRuntimeRef.current.dispose();
         trackRuntimeRef.current = null;
@@ -602,6 +606,7 @@ export default function App() {
       scene.fog = new THREE.FogExp2(0x7897aa, 0.00135);
       drivingEnvironmentRef.current = 'showcase';
       setPhysicsSurface(engine, runtime.surfaceProvider);
+      envManagerRef.current?.setSurfaceProvider(runtime.surfaceProvider);
       resetVehicleForActiveEnvironment(engine);
       isStartMenuOpenRef.current = false;
       setIsStartMenuOpen(false);

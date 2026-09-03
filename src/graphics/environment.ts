@@ -29,6 +29,27 @@ export class EnvironmentManager {
   private smokeGeo: THREE.SphereGeometry;
   private smokeMat: THREE.MeshBasicMaterial;
   private readonly surfaceProvider = new ProvingGroundSurfaceProvider();
+  private groundElevationSampler: (x: number, z: number) => number = () => 0;
+
+  public setGroundElevationSampler(sampler: ((x: number, z: number) => number) | null): void {
+    this.groundElevationSampler = sampler ?? (() => 0);
+  }
+
+  public setSurfaceProvider(provider: { sampleSurface(x: number, z: number): { elevation: number } } | null): void {
+    if (!provider) {
+      this.groundElevationSampler = () => 0;
+      return;
+    }
+    this.groundElevationSampler = (x, z) => {
+      try {
+        const s = provider.sampleSurface(x, z);
+        const e = (s as any)?.elevation;
+        return Number.isFinite(e) ? (e as number) : 0;
+      } catch {
+        return 0;
+      }
+    };
+  }
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -365,10 +386,11 @@ export class EnvironmentManager {
       const p3 = new THREE.Vector3().addVectors(currentPos, normal);
       const p4 = new THREE.Vector3().subVectors(currentPos, normal);
 
-      p1.y = 0.02;
-      p2.y = 0.02;
-      p3.y = 0.02;
-      p4.y = 0.02;
+      // Preserve active-surface elevation; add small lift to sit above ribbon.
+      p1.y = lastPos.y + 0.012;
+      p2.y = lastPos.y + 0.012;
+      p3.y = currentPos.y + 0.012;
+      p4.y = currentPos.y + 0.012;
 
       const geom = new THREE.BufferGeometry();
       const vertices = new Float32Array([
@@ -437,8 +459,9 @@ export class EnvironmentManager {
     wheels.forEach((wheel) => {
       const wx = carX + (wheel.localPos.x * cosYaw + wheel.localPos.z * sinYaw);
       const wz = carZ + (-wheel.localPos.x * sinYaw + wheel.localPos.z * cosYaw);
-      const contactPos = new THREE.Vector3(wx, 0.02, wz);
-      wheel.groundContactPos = { x: wx, y: 0.02, z: wz };
+      const groundY = this.groundElevationSampler(wx, wz);
+      const contactPos = new THREE.Vector3(wx, groundY + 0.02, wz);
+      wheel.groundContactPos = { x: wx, y: groundY + 0.02, z: wz };
 
       if (wheel.isSkidding && wheel.skidIntensity > 0.08) {
         this.addSkidMarkSegment(wheel.id, contactPos, wheel.skidIntensity);
