@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:track": "tsx src/graphics/tracks/showcaseCircuitQA.ts",
     "test:conventions": "tsx src/physics/tests/PhysicsConventionTests.ts",
     "test:digital-steering": "tsx src/physics/tests/DigitalSteeringInputTests.ts",
     "test:mouse-steering": "tsx src/physics/tests/MouseSteeringInputTests.ts",
@@ -60,9 +61,9 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
-    "tailwindcss": "^4.1.14",
+    "tailwindcss": "^4.21.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "@types/express": "^4.17.21"
+    "@types/express": "^5.0.1"
   }
 }
