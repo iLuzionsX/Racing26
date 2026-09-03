@@ -1,1 +1,22 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+ACT AS A HIGH-SPEED QA/PLAYTEST ENGINEER FOR THE CURRENT SHOWCASE CIRCUIT AND FIX THE MOST IMPORTANT FAILURES. The user reports the track is barely drivable. Do not assume passing build/physics regressions means the feature works.
+
+Analyze the complete integration across src/App.tsx, src/components/StartMenu.tsx, and src/graphics/tracks/showcaseCircuit.ts. Preserve the original plane as default and do not edit M5 physics equations/tuning/validation code.
+
+Test mentally/programmatically from the actual code paths: selecting Showcase from menu, lazy load, initial spawn, first suspension initialization, acceleration away from grid, repeated wheel surface samples, going off/on track, bridge crossover/underpass, tunnel, elevation changes, R reset at multiple points, Escape/menu re-entry, switching back to plane and then reloading track, camera behavior at steep grades, and cleanup/disposal.
+
+Specifically look for integration defects such as:
+- chassis reset height mismatching banked surface at spawn;
+- suspension hubs initializing against different deck samples;
+- stateful surface-provider selection changing based on wheel sampling order;
+- contact normal/elevation discontinuities causing launches/rollovers;
+- controls or simulation continuing underneath the menu;
+- track reload leaving hidden lights/fog/background/objects behind;
+- plane objects hidden/restored incorrectly;
+- track rendering surface not matching physics surface;
+- barriers/props placed where car actually drives;
+- camera clipping or loss of orientation on steep sections;
+- unreachable or nonsensical portions of the lap.
+
+Prioritize fixes that make one clean full lap possible before adding any more spectacle. It is acceptable to simplify the route, reduce banking/elevation, widen the track/runoff, remove problem scenery, or replace fragile crossover logic. Add deterministic test/diagnostic helpers in allowed src files where useful so this doesn't regress again.
+
+Return a concrete complete patch, not only findings. Required gates: npm run test:conventions, npm run test:m5-validation:strict, npm run build.
