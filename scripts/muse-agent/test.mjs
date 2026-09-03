@@ -7,7 +7,10 @@ assert.equal(isAllowedPath('src/physics/tests/TireModelTests.ts'), true);
 assert.equal(isAllowedPath('src/App.tsx'), true);
 assert.equal(isAllowedPath('public/example.json'), true);
 assert.equal(isAllowedPath('index.html'), true);
-assert.equal(isAllowedPath('package.json'), true);
+assert.equal(isAllowedPath('package.json'), false);
+assert.equal(isAllowedPath('vite.config.ts'), false);
+assert.equal(isAllowedPath('tsconfig.json'), false);
+assert.equal(isContextPath('package.json'), true);
 assert.equal(isContextPath('AGENTS.md'), true);
 assert.equal(isContextPath('PHYSICS_CONVENTIONS.md'), true);
 assert.equal(isContextPath('M5_VALIDATION.md'), true);
@@ -29,16 +32,27 @@ const safe = validatePatchScope(safePatch);
 assert.equal(safe.ok, true);
 assert.deepEqual(safe.paths, ['src/physics/tests/TireModelTests.ts']);
 
-const unsafePatch = `diff --git a/.github/workflows/pages.yml b/.github/workflows/pages.yml
+const workflowPatch = `diff --git a/.github/workflows/pages.yml b/.github/workflows/pages.yml
 --- a/.github/workflows/pages.yml
 +++ b/.github/workflows/pages.yml
 @@ -1,1 +1,1 @@
 -old
 +new
 `;
-const unsafe = validatePatchScope(unsafePatch);
-assert.equal(unsafe.ok, false);
-assert.match(unsafe.error, /outside the allowlist/i);
+const workflow = validatePatchScope(workflowPatch);
+assert.equal(workflow.ok, false);
+assert.match(workflow.error, /outside the allowlist/i);
+
+const configPatch = `diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -1,1 +1,1 @@
+-old
++new
+`;
+const config = validatePatchScope(configPatch);
+assert.equal(config.ok, false);
+assert.match(config.error, /outside the allowlist/i);
 
 const secretPatch = `diff --git a/src/.env b/src/.env
 --- a/src/.env
