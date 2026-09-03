@@ -1,1 +1,16 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+MAKE A SMALL, EXACT PATCH FOR START-MENU / ENVIRONMENT RUNTIME QA ONLY. The Showcase Circuit geometry has already been rebuilt on this branch and has its own blocking track QA. Do not edit showcaseCircuit.ts, vehicle physics, physics tuning, validation tests, package.json, or workflows.
+
+Inspect src/App.tsx and src/components/StartMenu.tsx. Fix only clear runtime integration defects around the existing Plane / Showcase selection.
+
+Acceptance criteria:
+- While StartMenu is visible, normal VehiclePhysicsEngine.update must NOT advance the car with zero inputs; opening Escape mid-run should freeze the current simulation state rather than coast downhill/forward behind the menu.
+- Keyboard/touch/mouse driving inputs must remain blocked while menu is open.
+- Selecting Plane after Showcase restores proving-ground object visibility, original background/fog, original surface provider, clears stale track skid marks, disposes track runtime, and resets to exact plane spawn.
+- Selecting Showcase hides proving-ground objects, lazy-loads exactly one track runtime, switches BOTH engine.surfaceProvider and simulation.vehicle.surfaceProvider, clears stale skid marks, and resets to the track spawn/elevation.
+- R resets to the currently active environment spawn.
+- Reopening menu with Escape and selecting the already-active environment is safe.
+- Switching Plane -> Showcase -> Plane -> Showcase must not leave duplicate track groups/lights or stale hidden objects.
+- Do not add a camera surface sample if it can mutate physics state. Current rebuilt Showcase provider is stateless, but avoid unrelated camera changes in this patch.
+- Preserve default Plane selection and all existing HUD/controls.
+
+Keep the patch minimal and limited to App.tsx unless StartMenu has an actual defect. Return a standard unified diff. Required checks: npm run test:track, npm run test:conventions, npm run test:m5-validation:strict, npm run build.
