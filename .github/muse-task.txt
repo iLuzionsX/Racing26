@@ -1,1 +1,20 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+TEST AND FIX THE SHOWCASE CIRCUIT AS A DRIVEABLE RACE TRACK. This is not a build-only audit. The user has already driven the current track and reports it is barely drivable and that geometry/scenery is all over the place. Treat that feedback as authoritative.
+
+Primary mission: diagnose and correct the actual route geometry and physics-surface continuity in src/graphics/tracks/showcaseCircuit.ts. You may edit App.tsx or StartMenu only if required for testing/fixing track behavior. Do not change M5 vehicle physics equations/tuning/validation code.
+
+Perform a deep static/playability analysis of the full loop. Quantify or reason through: local curvature / minimum corner radius, grade and grade-rate changes, banking transitions, centerline segment spacing, ribbon orientation/twist continuity, road width, edge/runoff continuity, self-intersections, bridge deck clearance, wrong-branch selection at XZ crossovers, surface elevation continuity, normal discontinuities, spawn heading/elevation, and whether an M5 can traverse the loop continuously at sensible racing speeds.
+
+Hard acceptance criteria:
+- No sudden track-surface elevation jumps or normal flips along the centerline.
+- No ribbon inversion/twisting or sharp Catmull-Rom overshoot that makes corners physically unreasonable.
+- Avoid absurdly tight radii for an 16 m-wide M5 circuit; smooth/control-point layout should read as a real GP track.
+- Grades and bank transitions must be progressive; remove roller-coaster spikes.
+- At the bridge crossover, the active deck selection must be stable for all 4 wheel contact queries, not statefully oscillate based on whichever wheel sampled last.
+- Surface lookup must not use a single mutable global elevationHint in a way that can make left/right or front/rear wheels choose different decks at the same frame.
+- Off-track/runoff should not create invisible cliffs immediately beside the asphalt unless visually intentional.
+- Reset/spawn must put all wheels on a coherent road patch.
+- Preserve default plane behavior exactly.
+
+If the current route is fundamentally bad, simplify or redraw the control points rather than trying to save every spectacle feature. DRIVEABILITY WINS. Keep the bridge/tunnel/elevation identity only where it remains coherent.
+
+Produce a concrete patch. Prefer deterministic, testable helper functions/exports where useful. Include exact tests/diagnostics the lead can run, but do not claim you executed them. Required gates remain npm run test:conventions, npm run test:m5-validation:strict, npm run build.
