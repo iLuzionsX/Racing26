@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+html[data-driving-mobile='true'],
+html[data-driving-mobile='true'] body,
+html[data-driving-mobile='true'] #root,
+html[data-driving-mobile='true'] #driving-simulator-app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html[data-driving-mobile='true'] #driving-simulator-app canvas {
+  touch-action: none;
+}
+
+html[data-driving-mobile='true'] #assetto-corsa-import-btn,
+html[data-driving-mobile='true'] #drs-toggle-btn,
+html[data-driving-mobile='true'] #clutch-kick-btn {
+  display: none;
+}
+
+/* Mobile top bar: keep only camera + the compact utility menu. */
+html[data-driving-mobile='true'] #preset-selector-btn {
+  display: none;
+}
+
+html[data-driving-mobile='true'] #camera-mode-btn span {
+  display: none;
+}
+
+html[data-driving-mobile='true'] #driving-utility-bar > div:first-child {
+  border-color: rgb(71 85 105 / 0.55);
+  background: rgb(2 6 23 / 0.58);
+  backdrop-filter: blur(8px);
+}
+
+html[data-driving-mobile='true'] #driving-utility-menu {
+  background: rgb(2 6 23 / 0.74);
+}
+
+/* Put the speed/gear cluster high and left, away from both thumbs. */
+html[data-driving-mobile='true'] #driving-hud > .bottom-28 {
+  top: max(0.7rem, env(safe-area-inset-top));
+  left: max(0.7rem, env(safe-area-inset-left));
+  bottom: auto !important;
+  transform: none !important;
+}
+
+html[data-driving-mobile='true'] #driving-hud > .bottom-28 > div:first-child {
+  gap: 0.55rem !important;
+  padding: 0.45rem 0.6rem !important;
+  border-radius: 1rem;
+  border-color: rgb(71 85 105 / 0.55);
+  background: rgb(2 6 23 / 0.58);
+  backdrop-filter: blur(8px);
+}
+
+/* RPM/boost bars and HUD-density controls are desktop information on a phone. */
+html[data-driving-mobile='true'] #driving-hud > .bottom-28 > div:first-child > div:nth-child(3),
+html[data-driving-mobile='true'] #driving-hud div:has(> #hud-density-btn),
+html[data-driving-mobile='true'] #driving-hud > .bottom-28 > .mt-1 {
+  display: none !important;
+}
+
+html[data-driving-mobile='true'] #toggle-auto-btn {
+  min-width: 2.35rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 1.25rem;
+}
+
+html[data-driving-mobile='true'] #toggle-unit-btn {
+  font-size: 0.5rem;
+}
+
+/* Thumb controls: translucent until pressed, large hit targets, edge anchored. */
+html[data-driving-mobile='true'] #mobile-driving-controls button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-driving-mobile='true'] #mobile-steering-pad,
+html[data-driving-mobile='true'] #mobile-pedal-pad {
+  filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.28));
+}
+
+html[data-driving-mobile='true'] .mobile-steer-button {
+  border-radius: 9999px;
+}
+
+html[data-driving-mobile='true'] .mobile-throttle,
+html[data-driving-mobile='true'] .mobile-brake {
+  border-radius: 1.7rem 1.7rem 1.15rem 1.15rem;
+}
+
+html[data-driving-mobile='true'] #mobile-quick-actions {
+  opacity: 0.82;
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  html[data-driving-mobile='true'] #mobile-driving-controls {
+    padding-bottom: max(0.55rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  html[data-driving-mobile='true'] #mobile-steering-pad > span {
+    display: none;
+  }
+
+  html[data-driving-mobile='true'] #mobile-quick-actions {
+    margin-bottom: max(0.55rem, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  html[data-driving-mobile='true'] #mobile-landscape-hint {
+    display: block;
+  }
+
+  html[data-driving-mobile='true'] #driving-hud > .bottom-28 {
+    top: max(3.7rem, calc(env(safe-area-inset-top) + 3rem));
+  }
+
+  html[data-driving-mobile='true'] .mobile-steer-button {
+    width: 4.15rem !important;
+    height: 4.15rem !important;
+  }
+
+  html[data-driving-mobile='true'] .mobile-handbrake {
+    width: 3.35rem !important;
+    height: 3.35rem !important;
+  }
+
+  html[data-driving-mobile='true'] .mobile-brake {
+    width: 3.75rem !important;
+    height: 5.25rem !important;
+  }
+
+  html[data-driving-mobile='true'] .mobile-throttle {
+    width: 3.9rem !important;
+    height: 5.9rem !important;
+  }
+
+  html[data-driving-mobile='true'] #mobile-steering-pad > div,
+  html[data-driving-mobile='true'] #mobile-pedal-pad {
+    gap: 0.4rem !important;
+  }
+
+  html[data-driving-mobile='true'] #mobile-quick-actions {
+    bottom: 6.4rem;
+    margin-bottom: 0 !important;
+  }
+}

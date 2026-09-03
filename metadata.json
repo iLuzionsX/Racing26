@@ -1,0 +1,6 @@
+{
+  "name": "3D Driving Simulator",
+  "description": "Next-level 3D vehicle dynamics simulator featuring Pacejka '96 combined slip, pneumatic trail & self-aligning torque, Ackermann steering kinematics, 2-way damper valving, ground-effect diffuser aerodynamics, 1.5/2-way ramp LSD, rev-limiter fuel cuts, dynamic tire carcass deflection, and real-time telemetry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

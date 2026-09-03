@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>3D Driving Simulator - Vehicle Physics & Body Roll</title>
+    <meta name="description" content="Keyboard-friendly 3D driving simulator with authentic vehicle physics, chassis weight transfer, and body roll dynamics." />
+    <meta property="og:title" content="My Google AI Studio App" />
+    <meta property="og:description" content="An application built with Google AI Studio." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      (() => {
+        const escapeHtml = (value) => String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;');
+        const showStartupFailure = (message) => {
+          const root = document.getElementById('root');
+          if (!root || root.childNodes.length > 0) return;
+          root.innerHTML = `<pre id="bootstrap-error" style="margin:0;min-height:100vh;padding:20px;box-sizing:border-box;background:#111827;color:#fca5a5;white-space:pre-wrap;font-family:monospace">${escapeHtml(message)}</pre>`;
+        };
+        window.addEventListener('error', (event) => {
+          const detail = event.error?.stack || event.message || 'Unknown startup error';
+          console.error('Bootstrap startup failure', detail);
+          setTimeout(() => showStartupFailure(`Application failed before React mounted:\n${detail}`), 0);
+        });
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason?.stack || event.reason?.message || event.reason || 'Unknown rejected promise';
+          console.error('Bootstrap unhandled rejection', reason);
+          setTimeout(() => showStartupFailure(`Application startup promise failed:\n${reason}`), 0);
+        });
+        setTimeout(() => showStartupFailure('Application did not mount within 4 seconds. Check the browser console for the startup error.'), 4000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
