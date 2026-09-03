@@ -1,1 +1,20 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+BUILD REAL AUTOMATED QA FOR THE SHOWCASE CIRCUIT SO 'npm build passes' CAN NEVER AGAIN BE MISTAKEN FOR 'THE TRACK IS DRIVEABLE'. The current circuit was merged after generic validation but user playtest found it barely drivable.
+
+Your primary deliverable is deterministic source-level track QA under allowed src/**, plus any small helper exports/refactors needed in src/graphics/tracks/showcaseCircuit.ts. Do not edit BMW M5 physics equations/tuning/validation behavior.
+
+Create a test/diagnostic executable that can be run with tsx and fails nonzero on bad track geometry. Aim for strong quantitative checks such as:
+- dense centerline sampling with finite values and closed-loop continuity;
+- minimum horizontal centerline curvature radius appropriate for a 16 m-wide performance-car circuit (no cusps / ribbon inversion; flag absurdly tight radii);
+- max grade and grade-rate / vertical curvature limits;
+- max bank and bank-rate limits;
+- adjacent sample tangent/normal continuity and no normal flips;
+- left/right ribbon orientation remains consistent and width does not fold through itself;
+- non-adjacent XZ near-crossings are either sufficiently separated vertically or explicitly coherent bridge/underpass crossings;
+- surface-provider determinism: querying the exact same coordinates in different wheel/order sequences returns the same deck/elevation/normal. The current mutable elevationHint design is suspect and should be exposed by this test;
+- spawn center + four wheel-like offsets all resolve to one coherent deck with expected banked height spread;
+- road/kerb/runoff transition samples match visible widths and are finite;
+- optionally a lightweight deterministic headless M5 path-following smoke lap if practical without introducing test-only physics behavior. The test must control normal simulation inputs only; no teleporting/validation force overrides.
+
+If tests expose defects, you may include targeted fixes, but keep this branch primarily about reusable QA instrumentation. Export only the minimum track path/debug API needed. Make failure messages print actionable metrics (minimum radius + u/location, max grade, max bank rate, crossover coordinates, etc.).
+
+Return a concrete patch. Include the exact npx tsx command to run the new test. Do not claim you executed it. Required existing gates remain npm run test:conventions, npm run test:m5-validation:strict, npm run build.
