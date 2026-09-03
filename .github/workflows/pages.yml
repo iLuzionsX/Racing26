@@ -1,0 +1,87 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Muse guardrail self-test
+        run: node scripts/muse-agent/test.mjs
+
+      - name: TypeScript validation
+        run: npm run lint
+
+      - name: Physics convention guardrails
+        run: npm run test:conventions
+
+      - name: Low-speed braking regression
+        run: npm run test:low-speed-brake
+
+      - name: Low-speed cornering regression
+        run: npm run test:cornering
+
+      - name: Suspension regression
+        run: npm run test:suspension
+
+      - name: Tire-model regression
+        run: npm run test:tire
+
+      - name: Hardened BMW M5 validation
+        run: npm run test:m5-validation:strict
+
+      - name: Upload M5 validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m5-validation-suite
+          path: artifacts/m5-validation/**
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Production build
+        run: npm run build -- --base=/Racing26/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
