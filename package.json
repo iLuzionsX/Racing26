@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:track": "tsx src/graphics/tracks/showcaseCircuitQA.ts",
     "test:conventions": "tsx src/physics/tests/PhysicsConventionTests.ts",
     "test:digital-steering": "tsx src/physics/tests/DigitalSteeringInputTests.ts",
     "test:mouse-steering": "tsx src/physics/tests/MouseSteeringInputTests.ts",
