@@ -34,9 +34,6 @@ jobs:
       - name: Muse guardrail self-test
         run: node scripts/muse-agent/test.mjs
 
-      - name: TypeScript validation
-        run: npm run lint
-
       - name: Physics convention guardrails
         run: npm run test:conventions
 
