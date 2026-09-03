@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectContext, validatePatchScope, AGENT_SCOPE } from './policy.mjs';
+import { parseMuseOutput } from './output.mjs';
 import { OpenCodeZenClient, MUSE_MODEL, ZEN_ENDPOINT } from './zen.mjs';
 
 function usage() {
@@ -53,32 +54,21 @@ function systemInstructions() {
     `Allowed change roots: ${AGENT_SCOPE.roots.map(r => `${r}/**`).join(', ')}. Exact allowed files: ${AGENT_SCOPE.exactAllowed.join(', ')}.`,
     'If implementation is justified, propose a standard unified git diff and never include files outside the allowed scope.',
     'Do not claim tests were executed. List the exact commands the lead engineer should run.',
-    'Return EXACTLY one JSON object and no Markdown fences or surrounding prose.',
-    'Required keys: summary, findings, files_inspected, files_proposed_for_change, patch, tests_to_run, risks, assumptions, unresolved_issues.',
+    'Preferred output: EXACTLY one JSON object and no Markdown fences or surrounding prose.',
+    'Required JSON keys: summary, findings, files_inspected, files_proposed_for_change, patch, tests_to_run, risks, assumptions, unresolved_issues.',
     'patch must be null or a string containing a unified diff. All list-like fields must be JSON arrays.',
+    'If a large unified diff makes JSON escaping unreliable, use the plain-text fallback envelope below instead of malformed JSON. Do not use Markdown fences around the envelope:',
+    'MUSE_SUMMARY_BEGIN\n<summary>\nMUSE_SUMMARY_END',
+    'MUSE_FILES_PROPOSED_FOR_CHANGE_BEGIN\n["src/example.ts"]\nMUSE_FILES_PROPOSED_FOR_CHANGE_END',
+    'MUSE_PATCH_BEGIN\n<standard unified git diff or NONE>\nMUSE_PATCH_END',
+    'MUSE_TESTS_BEGIN\n["npm run build"]\nMUSE_TESTS_END',
+    'You may also include FINDINGS, FILES_INSPECTED, RISKS, ASSUMPTIONS, and UNRESOLVED_ISSUES blocks using the same MUSE_<NAME>_BEGIN / END convention.',
   ].join('\n');
 }
 
 function buildInput(task, context) {
   const files = context.files.map(file => `\n===== FILE: ${file.path} (${file.bytes} bytes) =====\n${file.content}\n===== END FILE =====`).join('\n');
   return `DELEGATED OBJECTIVE\n${task}\n\nREPOSITORY SNAPSHOT\n${files}`;
-}
-
-function parseModelJson(raw) {
-  const text = String(raw || '').trim();
-  const attempts = [text];
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced?.[1]) attempts.push(fenced[1].trim());
-  const first = text.indexOf('{');
-  const last = text.lastIndexOf('}');
-  if (first >= 0 && last > first) attempts.push(text.slice(first, last + 1));
-  for (const candidate of attempts) {
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-    } catch {}
-  }
-  throw new Error('Muse did not return a valid JSON object.');
 }
 
 function normalizeResult(value) {
@@ -122,7 +112,7 @@ async function main() {
 
   const client = new OpenCodeZenClient();
   const response = await client.complete({ instructions: systemInstructions(), input: buildInput(task, context) });
-  const modelResult = normalizeResult(parseModelJson(response.text));
+  const modelResult = normalizeResult(parseMuseOutput(response.text));
   const validation = validatePatchScope(modelResult.patch);
   const artifact = {
     schema_version: 1,
