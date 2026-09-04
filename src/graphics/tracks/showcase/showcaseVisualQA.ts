@@ -18,6 +18,13 @@ import { buildTerrainPlacementSpecs, SHOWCASE_TERRAIN_DRAW_CALLS } from './terra
 import { SHOWCASE_RENDER_BUDGET } from './trackPerformance';
 import { SHOWCASE_ART_BUDGET, SHOWCASE_KENNEY_ASSET_IDS } from './showcaseArtBudget';
 import { SHOWCASE_MAX_TEXTURE_PX } from './showcaseSurfaceMaterials';
+import {
+  SHOWCASE_KERB_TEXTURE_PX,
+  SHOWCASE_KERB_RED_HEX,
+  SHOWCASE_KERB_WHITE_HEX,
+  buildKerbRibbonGeometryForSide,
+  isToyBrightKerbHex,
+} from './showcaseKerbs';
 
 interface Check { name: string; ok: boolean; detail: string; }
 const checks: Check[] = [];
@@ -87,6 +94,49 @@ export function runShowcaseVisualQA(): Check[] {
     SHOWCASE_MAX_TEXTURE_PX <= SHOWCASE_RENDER_BUDGET.maxTextureDimensionPx,
     `art=${SHOWCASE_MAX_TEXTURE_PX}px budget=${SHOWCASE_RENDER_BUDGET.maxTextureDimensionPx}px`,
   );
+
+  check(
+    'kerb-texture-budget',
+    SHOWCASE_KERB_TEXTURE_PX <= 256 && SHOWCASE_KERB_TEXTURE_PX <= SHOWCASE_RENDER_BUDGET.maxTextureDimensionPx,
+    `kerb=${SHOWCASE_KERB_TEXTURE_PX}px budget=${SHOWCASE_RENDER_BUDGET.maxTextureDimensionPx}px`,
+  );
+
+  check(
+    'kerb-palette-weathered',
+    !isToyBrightKerbHex(SHOWCASE_KERB_RED_HEX) && !isToyBrightKerbHex(SHOWCASE_KERB_WHITE_HEX) && SHOWCASE_KERB_RED_HEX !== 0xd62f2f && SHOWCASE_KERB_WHITE_HEX !== 0xf8fafc,
+    `red=0x${SHOWCASE_KERB_RED_HEX.toString(16)} white=0x${SHOWCASE_KERB_WHITE_HEX.toString(16)} muted-not-toy`,
+  );
+
+  const kerbStubPath = {
+    lengthM: 400,
+    sampleAt: (u: number) => {
+      const x = u * 400;
+      return { center: new (require('three').Vector3)(x, 0, 0), bankedLateral: new (require('three').Vector3)(0, 0, 1), normal: new (require('three').Vector3)(0, 1, 0) };
+    },
+  };
+  let kerbGeoOk = false;
+  let kerbGeoDetail = 'build failed';
+  try {
+    const left = buildKerbRibbonGeometryForSide(kerbStubPath as any, 1, { trackHalfWidthM: TRACK_WIDTH_M / 2, curbWidthM: CURB_WIDTH_M });
+    const right = buildKerbRibbonGeometryForSide(kerbStubPath as any, -1, { trackHalfWidthM: TRACK_WIDTH_M / 2, curbWidthM: CURB_WIDTH_M });
+    const hasColor = left.hasAttribute('color') && right.hasAttribute('color');
+    const hasUv = left.hasAttribute('uv') && right.hasAttribute('uv');
+    const leftPos = left.getAttribute('position');
+    const leftCol = left.getAttribute('color') as any;
+    let seenRed = false;
+    let seenWhite = false;
+    const tmp = new (require('three').Color)();
+    const redRef = new (require('three').Color)(SHOWCASE_KERB_RED_HEX);
+    const whiteRef = new (require('three').Color)(SHOWCASE_KERB_WHITE_HEX);
+    for (let i = 0; i < leftCol.count; i += 4) {
+      tmp.fromBufferAttribute(leftCol, i);
+      if (tmp.getHex() === redRef.getHex() || Math.abs(tmp.r - redRef.r) < 0.12) seenRed = true;
+      if (Math.abs(tmp.r - whiteRef.r) < 0.16 && Math.abs(tmp.g - whiteRef.g) < 0.16) seenWhite = true;
+    }
+    kerbGeoOk = hasColor && hasUv && (leftPos.count > 800) && seenRed && seenWhite && left.index !== null;
+    kerbGeoDetail = `verts=${leftPos.count} indexed=${left.index !== null} red=${seenRed} white=${seenWhite}`;
+  } catch (e) { kerbGeoDetail = String(e); }
+  check('kerb-continuous-ribbon', kerbGeoOk, kerbGeoDetail);
 
   const knownProcedural =
     SHOWCASE_ART_BUDGET.estimatedBaselineDrawCalls +

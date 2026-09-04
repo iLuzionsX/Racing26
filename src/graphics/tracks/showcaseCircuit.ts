@@ -9,6 +9,7 @@ import { buildBrakingBoardFamily, buildFictionalBanner, buildMarshalPost, buildT
 import { buildCrowdCluster, makeSeededRandom, makeSeatedGrid } from './showcase/crowd';
 import { tryComposeKenneyVenueGroup } from './showcase/kenneyVenueAssets';
 import { buildTerrainComposition } from './showcase/terrainComposition';
+import { buildKerbRibbons } from './showcase/showcaseKerbs';
 import { SHOWCASE_KENNEY_ASSET_IDS } from './showcase/showcaseArtBudget';
 
 export const TRACK_CENTER_X = 560;
@@ -487,8 +488,6 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   const asphaltMaterial = surfaceMats.asphalt;
   const concreteMaterial = surfaceMats.barrierConcrete;
   const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x29333d, metalness: 0.67, roughness: 0.42 });
-  const redMaterial = new THREE.MeshStandardMaterial({ color: 0xd62f2f, roughness: 0.58 });
-  const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.54 });
   const cyanMaterial = new THREE.MeshStandardMaterial({
     color: 0x22d3ee,
     emissive: 0x075985,
@@ -535,31 +534,22 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   startLine.quaternion.copy(trackQuaternion(start));
   group.add(startLine);
 
-  // Route-following curbs and barriers use the full bank/pitch basis, not only yaw.
+  // Continuous weathered kerb ribbons replace the old 5m BoxGeometry blocks.
+  // Visual only: physical kerb lip/friction in ShowcaseCircuitSurfaceProvider is untouched.
+  const kerbRibbons = buildKerbRibbons(path, { trackHalfWidthM: TRACK_HALF_WIDTH_M, curbWidthM: CURB_WIDTH_M });
+  group.add(kerbRibbons.group);
+  // Route-following barriers use the full bank/pitch basis, not only yaw.
   const stationCount = 220;
-  const curbGeometry = new THREE.BoxGeometry(CURB_WIDTH_M, 0.09, 5.0);
   const barrierGeometry = new THREE.BoxGeometry(0.52, 1.05, 6.5);
-  const redCurbs = new THREE.InstancedMesh(curbGeometry, redMaterial, stationCount * 2);
-  const whiteCurbs = new THREE.InstancedMesh(curbGeometry, whiteMaterial, stationCount * 2);
   const barriers = new THREE.InstancedMesh(barrierGeometry, concreteMaterial, stationCount * 2);
   const matrix = new THREE.Matrix4();
   const scale = new THREE.Vector3(1, 1, 1);
-  let redIndex = 0;
-  let whiteIndex = 0;
   let barrierIndex = 0;
 
   for (let i = 0; i < stationCount; i++) {
     const s = path.sampleAt(i / stationCount);
     const quaternion = trackQuaternion(s);
     for (const side of [-1, 1]) {
-      const curbPosition = s.center
-        .clone()
-        .addScaledVector(s.bankedLateral, side * (TRACK_HALF_WIDTH_M + CURB_WIDTH_M * 0.5))
-        .addScaledVector(s.normal, 0.055);
-      matrix.compose(curbPosition, quaternion, scale);
-      if ((i + (side > 0 ? 0 : 1)) % 2 === 0) redCurbs.setMatrixAt(redIndex++, matrix);
-      else whiteCurbs.setMatrixAt(whiteIndex++, matrix);
-
       const barrierPosition = s.center
         .clone()
         .addScaledVector(s.bankedLateral, side * BARRIER_OFFSET_M)
@@ -568,16 +558,10 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
       barriers.setMatrixAt(barrierIndex++, matrix);
     }
   }
-  redCurbs.count = redIndex;
-  whiteCurbs.count = whiteIndex;
   barriers.count = barrierIndex;
-  redCurbs.instanceMatrix.needsUpdate = true;
-  whiteCurbs.instanceMatrix.needsUpdate = true;
   barriers.instanceMatrix.needsUpdate = true;
   barriers.castShadow = true;
-  group.add(redCurbs, whiteCurbs, barriers);
-  finalizeInstancedMesh(redCurbs);
-  finalizeInstancedMesh(whiteCurbs);
+  group.add(barriers);
   finalizeInstancedMesh(barriers);
 
   addGantry(group, start, metalMaterial, cyanMaterial, 22);
