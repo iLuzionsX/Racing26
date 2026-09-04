@@ -441,7 +441,7 @@ const MobileDrivingControls: React.FC<{
       id="mobile-driving-controls"
       className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-end justify-between gap-3"
       style={{
-        paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
+        paddingLeft: 'max(1.5rem, calc(env(safe-area-inset-left, 0px) + 1rem))',
         paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
         paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
       }}
