@@ -14,3 +14,4 @@ pr-121|handling-digital-driver-v3-max
 pr-122|handling-diff-lock-continuity
 pr-123|handling-v3-integrated
 pr-124|fix/track-surface-jitter
+pr-125|fix/high-speed-steering-stability
