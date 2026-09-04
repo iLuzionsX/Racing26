@@ -36,6 +36,9 @@ jobs:
       - name: Physics conventions
         run: npm run test:conventions
 
+      - name: Differential continuity
+        run: npm run test:differential-continuity
+
       - name: Digital steering unit
         run: npm run test:digital-steering
 
