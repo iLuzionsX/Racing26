@@ -146,6 +146,14 @@ export class Simulation {
       x: lerp(prev.x, curr.x, alpha),
       y: lerp(prev.y, curr.y, alpha),
       z: lerp(prev.z, curr.z, alpha),
+      // CarRenderer places the sprung body from elevationHeight, not y.
+      // Leaving it at curr stepped road-following height at 120 Hz on
+      // 144/165 Hz displays even though x/z/heave/hubs are smoothed.
+      elevationHeight: lerp(
+        Number.isFinite((prev as any).elevationHeight) ? (prev as any).elevationHeight : prev.y,
+        Number.isFinite((curr as any).elevationHeight) ? (curr as any).elevationHeight : curr.y,
+        alpha,
+      ),
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
