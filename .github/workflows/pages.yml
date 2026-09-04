@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -30,6 +32,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: App runtime wiring check
+        run: node scripts/app-runtime-wiring-check.mjs
 
       - name: Muse guardrail self-test
         run: node scripts/muse-agent/test.mjs
@@ -76,50 +81,58 @@ jobs:
           mkdir -p site
           cp -R dist/. site/
 
-      - name: Read optional PR preview target
-        id: preview
+      - name: Build configured PR previews
         shell: bash
         run: |
-          if [[ ! -f .github/pages-preview-ref.txt ]]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          PREVIEW_FILE=".github/pages-preview-refs.txt"
+          LEGACY_FILE=".github/pages-preview-ref.txt"
+
+          if [[ -f "$PREVIEW_FILE" ]]; then
+            cp "$PREVIEW_FILE" /tmp/pages-preview-refs.txt
+          elif [[ -f "$LEGACY_FILE" ]]; then
+            REF="$(sed -n 's/^ref=//p' "$LEGACY_FILE" | head -n 1)"
+            SLUG="$(sed -n 's/^slug=//p' "$LEGACY_FILE" | head -n 1)"
+            if [[ -n "$REF" && -n "$SLUG" ]]; then
+              printf '%s|%s\n' "$SLUG" "$REF" > /tmp/pages-preview-refs.txt
+            else
+              exit 0
+            fi
+          else
             exit 0
           fi
-          REF="$(sed -n 's/^ref=//p' .github/pages-preview-ref.txt | head -n 1)"
-          SLUG="$(sed -n 's/^slug=//p' .github/pages-preview-ref.txt | head -n 1)"
-          if [[ -z "$REF" || -z "$SLUG" ]]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ ! "$SLUG" =~ ^pr-[0-9]+$ ]]; then
-            echo "invalid preview slug: $SLUG" >&2
-            exit 1
-          fi
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout PR preview source
-        if: steps.preview.outputs.enabled == 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.preview.outputs.ref }}
-          path: preview-source
+          while IFS='|' read -r SLUG REF; do
+            [[ -z "$SLUG" || "$SLUG" == \#* ]] && continue
 
-      - name: Install PR preview dependencies
-        if: steps.preview.outputs.enabled == 'true'
-        working-directory: preview-source
-        run: npm install --no-package-lock --no-audit --no-fund
+            if [[ ! "$SLUG" =~ ^pr-[0-9]+$ ]]; then
+              echo "invalid preview slug: $SLUG" >&2
+              exit 1
+            fi
+            if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              echo "invalid preview ref: $REF" >&2
+              exit 1
+            fi
 
-      - name: Build PR preview
-        if: steps.preview.outputs.enabled == 'true'
-        working-directory: preview-source
-        run: npm run build -- --base=/Racing26/${{ steps.preview.outputs.slug }}/
+            DIR="_preview-$SLUG"
+            rm -rf "$DIR"
+            git fetch --no-tags origin "+refs/heads/$REF:refs/remotes/origin/$REF"
+            git worktree add --detach "$DIR" "refs/remotes/origin/$REF"
 
-      - name: Add PR preview to Pages artifact
-        if: steps.preview.outputs.enabled == 'true'
-        run: |
-          mkdir -p "site/${{ steps.preview.outputs.slug }}"
-          cp -R preview-source/dist/. "site/${{ steps.preview.outputs.slug }}/"
+            (
+              cd "$DIR"
+              npm install --no-package-lock --no-audit --no-fund
+              if [[ -f scripts/app-runtime-wiring-check.mjs ]]; then
+                node scripts/app-runtime-wiring-check.mjs
+              fi
+              npm run build -- --base="/Racing26/$SLUG/"
+            )
+
+            mkdir -p "site/$SLUG"
+            cp -R "$DIR/dist/." "site/$SLUG/"
+            git worktree remove --force "$DIR"
+          done < /tmp/pages-preview-refs.txt
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

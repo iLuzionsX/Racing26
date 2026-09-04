@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import {
   BARRIER_OFFSET_M,
   CURB_WIDTH_M,
   OUTER_RUNOFF_M,
   RUNOFF_WIDTH_M,
   TRACK_WIDTH_M,
+  SHOWCASE_PATH,
 } from '../showcaseCircuit';
 import {
   KENNEY_VENUE_ASSET_IDS,
@@ -18,6 +20,17 @@ import { buildTerrainPlacementSpecs, SHOWCASE_TERRAIN_DRAW_CALLS } from './terra
 import { SHOWCASE_RENDER_BUDGET } from './trackPerformance';
 import { SHOWCASE_ART_BUDGET, SHOWCASE_KENNEY_ASSET_IDS } from './showcaseArtBudget';
 import { SHOWCASE_MAX_TEXTURE_PX } from './showcaseSurfaceMaterials';
+import {
+  CURB_EDGE_DRAW_CALLS,
+  CURB_EDGE_LINE_WIDTH_M,
+  CURB_RED_HEX,
+  CURB_WHITE_HEX,
+  CURB_STRIPE_LENGTH_M,
+  CURB_SYSTEM_KIND,
+  CURB_VISUAL_PROFILE_M,
+  deriveRealisticCurbZones,
+  signedCurvatureAt,
+} from './realisticCurbs';
 
 interface Check { name: string; ok: boolean; detail: string; }
 const checks: Check[] = [];
@@ -86,6 +99,66 @@ export function runShowcaseVisualQA(): Check[] {
     'texture-budget',
     SHOWCASE_MAX_TEXTURE_PX <= SHOWCASE_RENDER_BUDGET.maxTextureDimensionPx,
     `art=${SHOWCASE_MAX_TEXTURE_PX}px budget=${SHOWCASE_RENDER_BUDGET.maxTextureDimensionPx}px`,
+  );
+
+
+  const curbZones = deriveRealisticCurbZones(SHOWCASE_PATH);
+  const curbZonesAgain = deriveRealisticCurbZones(SHOWCASE_PATH);
+  const curbCoverageFraction = curbZones.reduce((sum, zone) => sum + zone.approxLengthM, 0) /
+    Math.max(1, SHOWCASE_PATH.lengthM * 2);
+  const curbSideMismatches = curbZones.filter((zone) => {
+    const sign = signedCurvatureAt(SHOWCASE_PATH, zone.apexU) >= 0 ? 1 : -1;
+    return sign !== zone.side;
+  });
+  const shortCurbZones = curbZones.filter((zone) => zone.approxLengthM < 30);
+  const maxProfileM = Math.max(...CURB_VISUAL_PROFILE_M);
+  const minProfileM = Math.min(...CURB_VISUAL_PROFILE_M);
+
+  check(
+    'curb-system-not-lego',
+    CURB_SYSTEM_KIND === 'continuous-ribbon' && CURB_EDGE_DRAW_CALLS <= 3,
+    `system=${CURB_SYSTEM_KIND} draws=${CURB_EDGE_DRAW_CALLS}`,
+  );
+
+  const circuitSource = readFileSync(new URL('../showcaseCircuit.ts', import.meta.url), 'utf8');
+  const hasLegacyCurbBoxes = /BoxGeometry\s*\(\s*CURB_WIDTH_M/.test(circuitSource);
+  check(
+    'curb-no-box-spam',
+    !hasLegacyCurbBoxes,
+    hasLegacyCurbBoxes ? 'legacy CURB_WIDTH_M BoxGeometry detected' : 'no curb BoxGeometry spam',
+  );
+
+  check(
+    'curb-muted-palette',
+    CURB_RED_HEX === 0xad3e39 && CURB_WHITE_HEX === 0xded8ce,
+    `red=0x${CURB_RED_HEX.toString(16)} white=0x${CURB_WHITE_HEX.toString(16)}`,
+  );
+
+  check(
+    'curb-corner-only-coverage',
+    curbZones.length > 0 && curbZones.length < 20 &&
+      curbCoverageFraction > 0.01 && curbCoverageFraction < 0.28,
+    `zones=${curbZones.length} edgeCoverage=${(curbCoverageFraction * 100).toFixed(1)}%`,
+  );
+
+  check(
+    'curb-apex-side',
+    curbSideMismatches.length === 0,
+    `sideMismatches=${curbSideMismatches.length}/${curbZones.length}`,
+  );
+
+  check(
+    'curb-determinism-and-continuity',
+    JSON.stringify(curbZones) === JSON.stringify(curbZonesAgain) && shortCurbZones.length === 0,
+    `deterministic=${JSON.stringify(curbZones) === JSON.stringify(curbZonesAgain)} shortZones=${shortCurbZones.length}`,
+  );
+
+  check(
+    'curb-profile-realism',
+    minProfileM >= 0 && maxProfileM <= 0.025 &&
+      CURB_EDGE_LINE_WIDTH_M >= 0.10 && CURB_EDGE_LINE_WIDTH_M <= 0.20 &&
+      CURB_STRIPE_LENGTH_M >= 2.0 && CURB_STRIPE_LENGTH_M <= 6.0,
+    `profile=${(minProfileM * 1000).toFixed(0)}-${(maxProfileM * 1000).toFixed(0)}mm edgeLine=${CURB_EDGE_LINE_WIDTH_M.toFixed(2)}m stripe=${CURB_STRIPE_LENGTH_M.toFixed(1)}m`,
   );
 
   const knownProcedural =
