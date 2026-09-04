@@ -12,19 +12,26 @@ import { PhysicsMath } from './math/PhysicsMath';
 export function updateDigitalSteeringInput(
   currentInput: number,
   direction: -1 | 0 | 1,
-  _speedMs: number,
+  speedMs: number,
   dt: number
 ): number {
   if (dt <= 0) return PhysicsMath.clamp(currentInput, -1, 1);
 
   const target = direction;
 
-  // A driver can throw the wheel back through center faster than they normally
-  // wind steering into a corner. This is input-device emulation only: it does not
-  // inspect yaw, sideslip, tire state, or vehicle motion and never adds forces.
+  // Input-device emulation only: handwheel rate slows with road speed because a
+  // human cannot and should not throw full lock at 150 km/h as fast as at park.
+  // Eventual authority is preserved (held key still reaches +/-1) and reversal
+  // through center stays fast so opposite-lock catch remains reachable. This
+  // never inspects yaw/sideslip/tire state and never adds forces or yaw damping.
+  const speed = Math.abs(Number.isFinite(speedMs) ? speedMs : 0);
+  // Full rate to 25 m/s (~90 km/h, oversteer-catch region), then linear fade to
+  // 45% rate at 55 m/s (~198 km/h). Uses existing PhysicsMath clamp only.
+  const speedT = PhysicsMath.clamp((speed - 25) / 30, 0, 1);
+  const cruiseRate = 4.8 * (1 - 0.55 * speedT);
   const reversingDirection =
     direction !== 0 && Math.sign(currentInput) !== 0 && Math.sign(target) !== Math.sign(currentInput);
-  const ratePerSecond = direction === 0 ? 7.0 : reversingDirection ? 7.0 : 4.8;
+  const ratePerSecond = direction === 0 ? 7.0 : reversingDirection ? 7.0 : cruiseRate;
   const maxStep = ratePerSecond * dt;
   const error = target - currentInput;
 
