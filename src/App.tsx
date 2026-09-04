@@ -6,7 +6,7 @@ import { BMW_M5_2025_OVERRIDES } from './physics/m5G90';
 import { disableM5TwoWheelDrive, enableM5TwoWheelDrive } from './physics/m5DriveMode';
 import type { M5XDriveRestoreSnapshot } from './physics/m5DriveMode';
 import { VehiclePhysicsEngine } from './physics/vehiclePhysics';
-import { updateDigitalSteeringInput } from './physics/DigitalSteeringInput';
+import { slewAnalogSteeringInput, updateDigitalSteeringInput } from './physics/DigitalSteeringInput';
 import { mouseSteeringFromClientX, type SteeringInputMode } from './physics/MouseSteeringInput';
 import { CarRenderer } from './graphics/carRenderer';
 import { EnvironmentManager } from './graphics/environment';
@@ -118,6 +118,7 @@ export default function App() {
   const m5XDriveRestoreRef = useRef<M5XDriveRestoreSnapshot | null>(null);
   const keysDownRef = useRef<{ [code: string]: boolean }>({});
   const digitalSteerInputRef = useRef(0);
+  const analogSteerAppliedRef = useRef(0);
   const mouseSteerInputRef = useRef(0);
   const touchSteerInputRef = useRef(0);
   const touchSteerActiveRef = useRef(false);
@@ -164,6 +165,7 @@ export default function App() {
     }
 
     digitalSteerInputRef.current = 0;
+    analogSteerAppliedRef.current = 0;
     mouseSteerInputRef.current = 0;
     touchSteerInputRef.current = 0;
     touchSteerActiveRef.current = false;
@@ -233,6 +235,7 @@ export default function App() {
         keysDownRef.current = {};
         setActiveKeys({});
         digitalSteerInputRef.current = 0;
+        analogSteerAppliedRef.current = 0;
         mouseSteerInputRef.current = 0;
         touchSteerInputRef.current = 0;
         touchSteerActiveRef.current = false;
@@ -337,22 +340,40 @@ export default function App() {
       let steerInput: number;
 
       if (touchAnalogSteeringActive) {
-        // The on-screen wheel is a true analog rack command, like mouse steering:
-        // the player chooses the steering fraction directly instead of holding a
-        // binary full-lock button. Keep the full mechanical rack available.
+        // The on-screen wheel remains a true analog hand-position control, but
+        // the command reaching the rack may no longer teleport in one render
+        // frame. Ordinary wind-on becomes calmer with speed; unwind/countersteer
+        // stays fast and the full mechanical rack remains available.
         physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction = 0;
         digitalSteerInputRef.current = 0;
-        steerInput = touchSteerInputRef.current;
+        analogSteerAppliedRef.current = slewAnalogSteeringInput(
+          analogSteerAppliedRef.current,
+          touchSteerInputRef.current,
+          physicsEngine.state.speedMs,
+          deltaTime
+        );
+        steerInput = analogSteerAppliedRef.current;
       } else if (steeringInputModeRef.current === 'mouse' && !touchSteeringActive && !inputBlocked) {
-        // Mouse/wheel-style analog input represents a fraction of the physical
-        // steering rack. BMW's speed sensitivity changes assistance/ratio, not
-        // the mechanical lock, so bypass the keyboard-only road-speed angle cap.
+        // Mouse steering uses the same analog hand-command slew as the on-screen
+        // wheel. This changes input velocity only, not rack travel or tire forces.
         physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction = 0;
         digitalSteerInputRef.current = 0;
-        steerInput = mouseSteerInputRef.current;
+        analogSteerAppliedRef.current = slewAnalogSteeringInput(
+          analogSteerAppliedRef.current,
+          mouseSteerInputRef.current,
+          physicsEngine.state.speedMs,
+          deltaTime
+        );
+        steerInput = analogSteerAppliedRef.current;
       } else {
-        // Restore the configured speed-shaped rack behavior for binary keyboard
-        // and touch control, where a held button otherwise means instant full lock.
+        // Binary keyboard/touch buttons get their own road-speed-aware wind-on.
+        // Release and reversal remain deliberately fast for oversteer recovery.
+        analogSteerAppliedRef.current = slewAnalogSteeringInput(
+          analogSteerAppliedRef.current,
+          0,
+          physicsEngine.state.speedMs,
+          deltaTime
+        );
         physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction =
           physicsEngine.config.steerSpeedReduction;
         const steerDirection: -1 | 0 | 1 = isLeft === isRight ? 0 : isLeft ? 1 : -1;
@@ -576,6 +597,7 @@ export default function App() {
     steeringInputModeRef.current = mode;
     setSteeringInputMode(mode);
     digitalSteerInputRef.current = 0;
+    analogSteerAppliedRef.current = 0;
     mouseSteerInputRef.current = 0;
     if (typeof window !== 'undefined') window.localStorage.setItem(STEERING_INPUT_STORAGE_KEY, mode);
   };
