@@ -5,6 +5,12 @@ export const MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG = 900;
 export const MOBILE_STEERING_WHEEL_MIN_ROTATION_DEG = 360;
 export const MOBILE_STEERING_WHEEL_MAX_ROTATION_DEG = 1080;
 export const MOBILE_STEERING_WHEEL_DEADZONE_DEG = 3;
+/**
+ * Pointer angle becomes ill-conditioned near the wheel center. Ignore movement
+ * inside this fraction of the rendered wheel radius, then resync the angle
+ * reference on exit so crossing the center cannot inject a huge steering jump.
+ */
+export const MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION = 0.22;
 export const MOBILE_STEERING_ROTATION_STORAGE_KEY = 'racing26.mobileControls.steeringRotation.v1';
 
 /**
@@ -113,6 +119,37 @@ export function mobileWheelPointerAngleDeg(
   clientY: number
 ): number {
   return Math.atan2(clientX - centerX, -(clientY - centerY)) * 180 / Math.PI;
+}
+
+export function mobileWheelPointerRadiusPx(
+  centerX: number,
+  centerY: number,
+  clientX: number,
+  clientY: number
+): number {
+  if (
+    !Number.isFinite(centerX) ||
+    !Number.isFinite(centerY) ||
+    !Number.isFinite(clientX) ||
+    !Number.isFinite(clientY)
+  ) {
+    return 0;
+  }
+  return Math.hypot(clientX - centerX, clientY - centerY);
+}
+
+export function isMobileWheelPointerNearCenter(
+  pointerRadiusPx: number,
+  wheelRadiusPx: number,
+  fraction = MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION
+): boolean {
+  if (!Number.isFinite(pointerRadiusPx) || !Number.isFinite(wheelRadiusPx) || wheelRadiusPx <= 0) {
+    return true;
+  }
+  const safeFraction = Number.isFinite(fraction)
+    ? Math.max(0, Math.min(0.5, fraction))
+    : MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION;
+  return pointerRadiusPx < Math.max(1, wheelRadiusPx * safeFraction);
 }
 
 /**
