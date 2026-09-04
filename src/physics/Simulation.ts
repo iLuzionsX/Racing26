@@ -91,7 +91,11 @@ export class Simulation {
    * Uses fixed 120 Hz accumulator with state interpolation.
    */
   public advance(deltaTime: number, inputs: ControlInputs): VehicleState {
-    const clampedDelta = Math.min(deltaTime, 0.1);
+    // Bound one render frame to exactly what the sub-step budget can consume.
+    // This preserves real-time at low FPS instead of accumulating an
+    // unconsumable backlog and then discarding it below.
+    const maxFrameTime = this.fixedDt * this.maxSubSteps;
+    const clampedDelta = Math.min(Math.max(0, deltaTime), maxFrameTime);
     this.accumulatedTime += clampedDelta;
 
     let subStepsTaken = 0;
@@ -114,8 +118,11 @@ export class Simulation {
       subStepsTaken++;
     }
 
-    if (this.accumulatedTime > this.fixedDt * 2) {
-      this.accumulatedTime = 0;
+    // Emergency spiral guard only. With the maxFrameTime clamp above, a normal
+    // frame can leave at most <1 step of remainder, so this branch is normally
+    // not taken and never discards whole steps of real simulation time.
+    if (subStepsTaken >= this.maxSubSteps && this.accumulatedTime >= this.fixedDt) {
+      this.accumulatedTime = Math.min(this.accumulatedTime, this.fixedDt * 0.999);
     }
 
     const alpha = Math.min(1.0, Math.max(0, this.accumulatedTime / this.fixedDt));
@@ -135,7 +142,10 @@ export class Simulation {
   }
 
   private interpolateState(prev: VehicleState, curr: VehicleState, alpha: number): VehicleState {
-    if (alpha <= 0.001) return prev;
+    // Remainder ~0 means render time coincides with the latest physics step.
+    // Return curr, not prev; returning prev lags one full 120Hz step and
+    // turns floating-point exact-step boundaries into visible snapback.
+    if (alpha <= 0.001) return curr;
     if (alpha >= 0.999) return curr;
 
     const lerp = PhysicsMath.lerp;
@@ -146,6 +156,11 @@ export class Simulation {
       x: lerp(prev.x, curr.x, alpha),
       y: lerp(prev.y, curr.y, alpha),
       z: lerp(prev.z, curr.z, alpha),
+      // CarRenderer places rootGroup.y from elevationHeight while x/z come from
+      // above. Leaving it stepped while hub.y is smoothed makes relative wheel
+      // height jitter by one step of track elevation change. Interpolate it
+      // with the same alpha so body and hubs share one time base.
+      elevationHeight: lerp((prev as any).elevationHeight ?? (curr as any).elevationHeight, (curr as any).elevationHeight, alpha),
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
