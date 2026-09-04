@@ -22,6 +22,7 @@ interface MobileDrivingControlsProps {
   onTouchInput: (action: MobileTouchAction, active: boolean) => void;
   onTouchSteer: (value: number, active: boolean) => void;
   steeringRotationDeg: number;
+  frontSaturationLevel?: number;
   onNextCamera: () => void;
   onReset: () => void;
 }
@@ -149,6 +150,7 @@ export const MobileDrivingControls: React.FC<MobileDrivingControlsProps> = ({
   onTouchInput,
   onTouchSteer,
   steeringRotationDeg,
+  frontSaturationLevel = 0,
   onNextCamera,
   onReset,
 }) => {
@@ -199,6 +201,7 @@ export const MobileDrivingControls: React.FC<MobileDrivingControlsProps> = ({
             onSteerChange={onTouchSteer}
             interactionEnabled={!editMode}
             steeringRotationDeg={steeringRotationDeg}
+            frontSaturationLevel={frontSaturationLevel}
           />
         </DraggableCluster>
 
