@@ -149,6 +149,10 @@ export class Simulation {
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
+      // CarRenderer positions the sprung body from road-relative heave rather than
+      // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
+      // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
+      heave: lerp(prev.heave, curr.heave, alpha),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
@@ -160,6 +164,11 @@ export class Simulation {
       turboBoostPsi: lerp(prev.turboBoostPsi, curr.turboBoostPsi, alpha),
       wheels: curr.wheels.map((w, i) => {
         const pw = prev.wheels[i];
+        const currHub = (w as any).hubWorldPos as { x: number; y: number; z: number } | undefined;
+        const prevHub = (pw as any).hubWorldPos as { x: number; y: number; z: number } | undefined;
+        const currContact = (w as any).groundContactPos as { x: number; y: number; z: number } | undefined;
+        const prevContact = (pw as any).groundContactPos as { x: number; y: number; z: number } | undefined;
+
         return {
           ...w,
           suspensionCompression: lerp(pw.suspensionCompression, w.suspensionCompression, alpha),
@@ -169,6 +178,23 @@ export class Simulation {
           forceVectorLong: lerp(pw.forceVectorLong, w.forceVectorLong, alpha),
           forceVectorLat: lerp(pw.forceVectorLat, w.forceVectorLat, alpha),
           forceVectorNorm: lerp(pw.forceVectorNorm, w.forceVectorNorm, alpha),
+          // The wheel renderer prefers the physical world-space hub coordinate.
+          // Leaving it at the current fixed step bypassed all of the interpolation
+          // above and made the wheels visibly tick at 120 Hz on high-refresh screens.
+          hubWorldPos: currHub && prevHub
+            ? {
+                x: lerp(prevHub.x, currHub.x, alpha),
+                y: lerp(prevHub.y, currHub.y, alpha),
+                z: lerp(prevHub.z, currHub.z, alpha),
+              }
+            : currHub,
+          groundContactPos: currContact && prevContact
+            ? {
+                x: lerp(prevContact.x, currContact.x, alpha),
+                y: lerp(prevContact.y, currContact.y, alpha),
+                z: lerp(prevContact.z, currContact.z, alpha),
+              }
+            : currContact,
         };
       }) as any,
     };
