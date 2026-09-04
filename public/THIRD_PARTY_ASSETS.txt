@@ -1,0 +1,35 @@
+Third-Party 3D Assets — Showcase Circuit venue pass
+========================================================
+
+1) Kenney Racing Kit
+   Author: Kenney (https://kenney.nl/assets/racing-kit)
+   License: CC0 1.0 Universal (public domain, no attribution required)
+   License text: https://creativecommons.org/publicdomain/zero/1.0/
+   Upstream pack page: https://kenney.nl/assets/racing-kit
+   Public mirror base URL used at runtime:
+     https://raw.githubusercontent.com/eturner58/game-assets/main/kenney/3D%20assets/Racing%20Kit/Models/GLTF%20format/
+
+   Venue allow-list only (13 small/prop/building/vehicle GLBs):
+     - grandStandCovered.glb
+     - grandStandCoveredRound.glb
+     - pitsGarage.glb
+     - pitsOffice.glb
+     - fenceStraight.glb
+     - billboard.glb
+     - camera_exclusive.glb
+     - tentLong.glb
+     - lightPostModern.glb
+     - flagCheckersSmall.glb
+     - radarEquipment.glb
+     - raceCarGreen.glb
+     - raceCarOrange.glb
+
+   Explicitly excluded: every Kenney road/track/asphalt/curve/chicane mesh.
+   The validated Showcase Circuit ribbon, banking, widths, surface provider,
+   spawn, and M5 physics remain authoritative and are never replaced.
+
+   Remote-load behavior: GLTFLoader with cache; any download/parse failure
+   logs a warning and the procedural circuit continues without that prop.
+   No integration into core yet; see
+     src/graphics/tracks/showcase/kenneyAssetManifest.ts
+     src/graphics/tracks/showcase/kenneyVenueAssets.ts
