@@ -153,6 +153,15 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // CarRenderer root Y comes from elevationHeight while pivot Y comes from
+      // interpolated heave. Leaving elevation at the latest fixed step reintroduces
+      // a 120 Hz vertical staircase on grades/crests (up to ~35mm/step at high
+      // speed) and makes the sprung body jitter relative to smooth hubs/camera.
+      // Visual interpolation only; physics sampling remains in Vehicle/Suspension.
+      elevationHeight:
+        Number.isFinite(prev.elevationHeight) && Number.isFinite(curr.elevationHeight)
+          ? lerp(prev.elevationHeight, curr.elevationHeight, alpha)
+          : curr.elevationHeight,
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
