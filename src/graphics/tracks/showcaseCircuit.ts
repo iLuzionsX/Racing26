@@ -179,6 +179,11 @@ export class ShowcaseTrackPath {
     let coarseBest = 0;
     let coarseDistance = Infinity;
 
+    // Coarse center-point scan narrows the search cheaply. The final answer is
+    // deliberately projected onto a centerline segment rather than snapped to one
+    // of these samples: the suspension queries this function at 120 Hz, and a
+    // nearest-sample staircase turns smooth elevation/grade into repeated vertical
+    // impacts for the unsprung wheel masses.
     for (let i = 0; i < PATH_SAMPLES; i += 5) {
       const s = this.samples[i];
       const dx = x - s.center.x;
@@ -190,24 +195,47 @@ export class ShowcaseTrackPath {
       }
     }
 
-    let best = this.samples[coarseBest];
+    let bestSegment = coarseBest;
+    let bestT = 0;
     let bestDistance = Infinity;
-    for (let k = -12; k <= 12; k++) {
-      const index = (coarseBest + k + PATH_SAMPLES) % PATH_SAMPLES;
-      const s = this.samples[index];
-      const dx = x - s.center.x;
-      const dz = z - s.center.z;
+
+    // Project the query onto nearby XZ centerline segments. The samples were built
+    // with getPointAt(), so interpolating the winning segment index maps directly
+    // back into sampleAt()'s normalized arc-length parameter.
+    for (let k = -14; k <= 14; k++) {
+      const i0 = (coarseBest + k + PATH_SAMPLES) % PATH_SAMPLES;
+      const i1 = (i0 + 1) % PATH_SAMPLES;
+      const a = this.samples[i0];
+      const b = this.samples[i1];
+      const abx = b.center.x - a.center.x;
+      const abz = b.center.z - a.center.z;
+      const len2 = abx * abx + abz * abz;
+      const t = len2 > 1e-10
+        ? THREE.MathUtils.clamp(
+            ((x - a.center.x) * abx + (z - a.center.z) * abz) / len2,
+            0,
+            1,
+          )
+        : 0;
+      const qx = a.center.x + abx * t;
+      const qz = a.center.z + abz * t;
+      const dx = x - qx;
+      const dz = z - qz;
       const d2 = dx * dx + dz * dz;
+
       if (d2 < bestDistance) {
         bestDistance = d2;
-        best = s;
+        bestSegment = i0;
+        bestT = t;
       }
     }
 
-    const dx = x - best.center.x;
-    const dz = z - best.center.z;
-    const lateralOffset = dx * best.lateral.x + dz * best.lateral.z;
-    return { sample: best, lateralOffset };
+    const u = ((bestSegment + bestT) / PATH_SAMPLES) % 1;
+    const sample = this.sampleAt(u);
+    const dx = x - sample.center.x;
+    const dz = z - sample.center.z;
+    const lateralOffset = dx * sample.lateral.x + dz * sample.lateral.z;
+    return { sample, lateralOffset };
   }
 
   public spawn(): ShowcaseSpawn {
