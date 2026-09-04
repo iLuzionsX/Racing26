@@ -3,7 +3,6 @@ import { Simulation } from '../Simulation';
 import { DEFAULT_VEHICLE_CONFIG } from '../vehiclePresets';
 import { BMW_M5_2025_OVERRIDES } from '../m5G90';
 import { PhysicsMath } from '../math/PhysicsMath';
-import { updateDigitalSteeringInput } from '../DigitalSteeringInput';
 import { deriveChassisMassProperties } from '../ChassisMassProperties';
 
 const dt = 1 / 120;
@@ -12,24 +11,6 @@ const neutral = { throttle: 0, brake: 0, steer: 0, handbrake: false, shiftUp: fa
 const sideslipDeg = (sim: Simulation) => {
   const v = sim.vehicle.rigidBody.getLocalVelocity();
   return Math.atan2(v.x, Math.max(0.1, Math.abs(v.z))) * DEG;
-};
-const digitalRecoveryState = (sim: Simulation) => {
-  const localV = sim.vehicle.rigidBody.getLocalVelocity();
-  const localW = sim.vehicle.rigidBody.getLocalAngularVelocity();
-  const speedMs = Math.hypot(localV.x, localV.z);
-  return {
-    speedMs,
-    context: {
-      wheelbaseM: sim.vehicle.config.wheelbase,
-      maxSteerAngleRad: sim.vehicle.config.maxSteerAngle,
-      yawRateRadS: localW.y,
-      sideslipRad:
-        speedMs > 0.5
-          ? Math.atan2(localV.x, Math.max(0.5, Math.abs(localV.z)))
-          : 0,
-      forwardSpeedMs: localV.z,
-    },
-  };
 };
 function sample(sim: Simulation, t: number, driverInput: number) {
   const s = sim.vehicle.getState();
@@ -115,12 +96,12 @@ function makeOversteeringM5() {
 }
 function runDigitalDriverRecovery() {
   const { sim, inductionSec, yawInertiaKgM2, inductionTail } = makeOversteeringM5();
-  let digitalInput = 0.18;
+  sim.resetDigitalSteeringInput(0.18);
   let released = false;
   let releaseTimeSec: number | null = null;
   let peakCounterInput = 0;
   let peakCounterSteerDeg = 0;
-  const samples = [sample(sim, 0, digitalInput)];
+  const samples = [sample(sim, 0, sim.digitalSteeringInput)];
   const wanted = new Set([0.10, 0.25, 0.50, 0.75, 1.00, 1.50].map((t) => Math.round(t / dt)));
   const totalSteps = Math.round(1.5 / dt);
   for (let i = 1; i <= totalSteps; i++) {
@@ -128,16 +109,13 @@ function runDigitalDriverRecovery() {
     const yawDegS = stateBefore.yawRate * DEG;
     if (!released && yawDegS <= 8) { released = true; releaseTimeSec = i * dt; }
     const direction: -1 | 0 = released ? 0 : -1;
-    const recoveryState = digitalRecoveryState(sim);
-    digitalInput = updateDigitalSteeringInput(
-      digitalInput,
-      direction,
-      recoveryState.speedMs,
-      dt,
-      recoveryState.context
+
+    const state = sim.stepExplicit(
+      { ...neutral, steer: 0, digitalSteerDirection: direction },
+      1
     );
+    const digitalInput = sim.digitalSteeringInput;
     peakCounterInput = Math.max(peakCounterInput, -digitalInput);
-    const state = sim.stepExplicit({ ...neutral, steer: digitalInput }, 1);
     peakCounterSteerDeg = Math.max(peakCounterSteerDeg, -state.actualSteerAngle * DEG);
     if (wanted.has(i)) samples.push(sample(sim, i * dt, digitalInput));
   }
