@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ISurfaceProvider, SurfaceSample } from '../../physics/SurfaceProvider';
+import { applyShowcaseLook } from './showcase/index';
 
 export const TRACK_CENTER_X = 560;
 export const TRACK_WIDTH_M = 20;
@@ -472,18 +473,10 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   const group = new THREE.Group();
   group.name = 'muse-showcase-circuit-v2';
 
-  const hemi = new THREE.HemisphereLight(0xdff4ff, 0x27321f, 1.0);
-  const sun = new THREE.DirectionalLight(0xfff0cf, 1.9);
-  sun.position.set(TRACK_CENTER_X + 180, 230, -150);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -320;
-  sun.shadow.camera.right = 320;
-  sun.shadow.camera.top = 320;
-  sun.shadow.camera.bottom = -320;
-  sun.shadow.camera.near = 20;
-  sun.shadow.camera.far = 700;
-  group.add(hemi, sun);
+  // Daylight-balanced rig + sky/fog/haze + venue practicals. Geometry below unchanged.
+  // Scene is available to the caller; atmosphere sky/fog attach to the track group
+  // parent via applyShowcaseLook once the group is added to the scene.
+  applyShowcaseLook(group.parent as unknown as THREE.Scene ?? new THREE.Scene(), group, path);
 
   const terrainMaterial = new THREE.MeshStandardMaterial({ color: 0x526044, roughness: 1 });
   const runoffMaterial = new THREE.MeshStandardMaterial({ color: 0x666b6f, roughness: 0.96 });
