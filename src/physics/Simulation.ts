@@ -115,6 +115,10 @@ export class Simulation {
     }
 
     if (this.accumulatedTime > this.fixedDt * 2) {
+      // Drop expired wall-time to avoid spiral-of-death, but keep display on
+      // the latest physics step. Leaving previousState one tick behind with
+      // alpha=0 would snap the rendered pose backward one 120 Hz step.
+      this.previousState = this.currentState;
       this.accumulatedTime = 0;
     }
 
@@ -153,6 +157,14 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // Renderer vertical is elevationHeight (+ heave). It must follow the same
+      // alpha as x/z/heave; otherwise graded track steps Y at 120 Hz while
+      // horizontal motion is smooth. Display-only, no force change.
+      elevationHeight:
+        Number.isFinite((prev as any).elevationHeight) &&
+        Number.isFinite((curr as any).elevationHeight)
+          ? lerp((prev as any).elevationHeight, (curr as any).elevationHeight, alpha)
+          : (curr as any).elevationHeight,
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
