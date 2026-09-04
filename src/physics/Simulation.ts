@@ -153,6 +153,10 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // Root body height is road-relative elevation plus heave. Hub/contact
+      // interpolation above mixes with this base, so elevation must use the same
+      // display alpha; otherwise the stepped base reintroduces a 120 Hz vertical tick.
+      elevationHeight: lerp(prev.elevationHeight ?? curr.elevationHeight, curr.elevationHeight ?? prev.elevationHeight, alpha),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
