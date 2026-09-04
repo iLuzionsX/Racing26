@@ -54,15 +54,28 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
 
   tireGripFront: 1.21,
   tireGripRear: 1.20,
+  // Preserve measured peak grip and longitudinal traction, but give the wide
+  // road tires a broader lateral working range. The previous shared B=15 curve
+  // built lateral force extremely quickly and peaked near 7.7 deg, so modest
+  // extra steering felt like a hard carcass suddenly washing out. Longitudinal
+  // B stays at 15 to protect the validated acceleration/braking envelope.
   tireStiffness: 15.0,
+  tireLongitudinalStiffnessB: 15.0,
+  tireLateralStiffnessB: 12.5,
   tireLoadSensitivity: 0.000030,
-  slideFrictionMultiplier: 0.83,
-  // The G90's heavy chassis should not see peak lateral tire force in the same
-  // 120 Hz frame as a steering step. A longer lateral relaxation length gives the
-  // contact patch/carcass time to take a set before load reaches the sprung body.
+  // Outside/inside corners start from their measured static axle loads rather
+  // than learning a reference during the first few seconds of driving.
+  tireReferenceLoadFrontN: 6367,
+  tireReferenceLoadRearN: 5316,
+  // Keep peak mu unchanged; retain slightly more force once the tire is clearly
+  // past the peak so recovery is progressive instead of an abrupt ice-like drop.
+  slideFrictionMultiplier: 0.86,
+  // Keep carcass response physical without the old 0.50 m double-relaxation
+  // delay. At 50-80 km/h this still takes multiple 120 Hz steps to build force,
+  // but turn-in no longer feels disconnected from the steering command.
   // Longitudinal relaxation remains independent below so acceleration/braking
   // response is unchanged.
-  relaxationLength: 0.50,
+  relaxationLength: 0.34,
   longitudinalRelaxationLength: 0.12,
   longitudinalForceRelaxationLength: 0.066,
   tirePneumaticTrailMax: 0.030,
