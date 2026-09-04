@@ -65,12 +65,11 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
   // Keep peak mu unchanged; retain slightly more force once the tire is clearly
   // past the peak so recovery is progressive instead of an abrupt ice-like drop.
   slideFrictionMultiplier: 0.86,
-  // Keep carcass response physical without the old 0.50 m double-relaxation
-  // delay. At 50-80 km/h this still takes multiple 120 Hz steps to build force,
-  // but turn-in no longer feels disconnected from the steering command.
-  // Longitudinal relaxation remains independent below so acceleration/braking
-  // response is unchanged.
-  relaxationLength: 0.34,
+  // Keep the validated lateral transient calibration. Full-car testing showed
+  // that shortening this value reduced useful corner force in the coupled
+  // wheel/chassis response, so the grip-feel change is intentionally confined
+  // to post-peak tire behavior below.
+  relaxationLength: 0.50,
   longitudinalRelaxationLength: 0.12,
   longitudinalForceRelaxationLength: 0.066,
   tirePneumaticTrailMax: 0.030,
