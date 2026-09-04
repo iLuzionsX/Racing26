@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   BARRIER_OFFSET_M,
   CURB_WIDTH_M,
@@ -22,6 +23,8 @@ import { SHOWCASE_MAX_TEXTURE_PX } from './showcaseSurfaceMaterials';
 import {
   CURB_EDGE_DRAW_CALLS,
   CURB_EDGE_LINE_WIDTH_M,
+  CURB_RED_HEX,
+  CURB_WHITE_HEX,
   CURB_STRIPE_LENGTH_M,
   CURB_SYSTEM_KIND,
   CURB_VISUAL_PROFILE_M,
@@ -115,6 +118,20 @@ export function runShowcaseVisualQA(): Check[] {
     'curb-system-not-lego',
     CURB_SYSTEM_KIND === 'continuous-ribbon' && CURB_EDGE_DRAW_CALLS <= 3,
     `system=${CURB_SYSTEM_KIND} draws=${CURB_EDGE_DRAW_CALLS}`,
+  );
+
+  const circuitSource = readFileSync(new URL('../showcaseCircuit.ts', import.meta.url), 'utf8');
+  const hasLegacyCurbBoxes = /BoxGeometry\s*\(\s*CURB_WIDTH_M/.test(circuitSource);
+  check(
+    'curb-no-box-spam',
+    !hasLegacyCurbBoxes,
+    hasLegacyCurbBoxes ? 'legacy CURB_WIDTH_M BoxGeometry detected' : 'no curb BoxGeometry spam',
+  );
+
+  check(
+    'curb-muted-palette',
+    CURB_RED_HEX === 0xad3e39 && CURB_WHITE_HEX === 0xded8ce,
+    `red=0x${CURB_RED_HEX.toString(16)} white=0x${CURB_WHITE_HEX.toString(16)}`,
   );
 
   check(
