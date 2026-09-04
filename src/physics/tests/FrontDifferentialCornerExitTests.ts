@@ -45,6 +45,29 @@ assert.equal(
   'G90 production calibration must keep the Active M Differential on the rear axle'
 );
 
+const productionWiringSim = new Simulation(config, new ProvingGroundSurfaceProvider());
+assert.equal(
+  productionWiringSim.vehicle.differential.config.frontType,
+  'OPEN',
+  'Vehicle construction must wire the G90 open front differential'
+);
+assert.equal(
+  productionWiringSim.vehicle.differential.config.rearType,
+  'TORQUE_VECTOR',
+  'Vehicle construction must wire the G90 rear Active M Differential'
+);
+productionWiringSim.setConfig(config);
+assert.equal(
+  productionWiringSim.vehicle.differential.config.frontType,
+  'OPEN',
+  'Runtime preset/tuning reconfiguration must preserve the G90 open front differential'
+);
+assert.equal(
+  productionWiringSim.vehicle.differential.config.rearType,
+  'TORQUE_VECTOR',
+  'Runtime preset/tuning reconfiguration must preserve the G90 rear Active M Differential'
+);
+
 function makeRollingM5(frontType: DifferentialType) {
   const sim = new Simulation(config, new ProvingGroundSurfaceProvider());
   sim.reset(0, 0, 0);
