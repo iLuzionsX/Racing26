@@ -54,14 +54,13 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
 
   tireGripFront: 1.21,
   tireGripRear: 1.20,
-  // Preserve measured peak grip and longitudinal traction, but give the wide
-  // road tires a broader lateral working range. The previous shared B=15 curve
-  // built lateral force extremely quickly and peaked near 7.7 deg, so modest
-  // extra steering felt like a hard carcass suddenly washing out. Longitudinal
-  // B stays at 15 to protect the validated acceleration/braking envelope.
+  // Preserve the validated pure-slip force curve and measured peak grip.
+  // The feel fix below targets transient response and post-peak retention rather
+  // than weakening cornering stiffness, which the full-car tests showed reduces
+  // useful lateral acceleration.
   tireStiffness: 15.0,
   tireLongitudinalStiffnessB: 15.0,
-  tireLateralStiffnessB: 13.5,
+  tireLateralStiffnessB: 15.0,
   tireLoadSensitivity: 0.000030,
   // Keep peak mu unchanged; retain slightly more force once the tire is clearly
   // past the peak so recovery is progressive instead of an abrupt ice-like drop.
