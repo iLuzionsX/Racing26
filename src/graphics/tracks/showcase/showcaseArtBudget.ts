@@ -1,3 +1,13 @@
+export const SHOWCASE_KENNEY_ASSET_IDS = [
+  'grandStandCovered',
+  'grandStandCoveredRound',
+  'pitsGarage',
+  'pitsOffice',
+  'tentLong',
+  'raceCarGreen',
+  'raceCarOrange',
+] as const;
+
 export const SHOWCASE_ART_BUDGET = {
   targetTotalDrawCalls: 60,
   estimatedBaselineDrawCalls: 20,
