@@ -135,7 +135,12 @@ export class Simulation {
   }
 
   private interpolateState(prev: VehicleState, curr: VehicleState, alpha: number): VehicleState {
-    if (alpha <= 0.001) return prev;
+    // When the accumulator remainder is ~0 we just completed step(s).
+    // Returning prev would render one 120 Hz step behind on exact
+    // cadences (60fps=2 steps, 30fps=4 steps) and alternate stale/smooth.
+    // Return the latest physics state instead. Zero-step high-refresh
+    // frames still interpolate below via hub/heave/pose lerp.
+    if (alpha <= 0.001) return curr;
     if (alpha >= 0.999) return curr;
 
     const lerp = PhysicsMath.lerp;
@@ -146,6 +151,14 @@ export class Simulation {
       x: lerp(prev.x, curr.x, alpha),
       y: lerp(prev.y, curr.y, alpha),
       z: lerp(prev.z, curr.z, alpha),
+      // Track elevation drives CarRenderer rootGroup.y. Leaving it at curr
+      // while x/z/heave/hub are interpolated steps the body at 120 Hz on
+      // graded showcase road. Interpolate like the other pose channels.
+      elevationHeight: lerp(
+        Number.isFinite((prev as any).elevationHeight) ? (prev as any).elevationHeight : (curr as any).elevationHeight,
+        Number.isFinite((curr as any).elevationHeight) ? (curr as any).elevationHeight : (prev as any).elevationHeight,
+        alpha
+      ),
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
