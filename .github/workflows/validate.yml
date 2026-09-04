@@ -47,6 +47,9 @@ jobs:
       - name: Mobile controls regression
         run: npm run test:mobile
 
+      - name: Hand-wheel tire-feel sweep
+        run: npm run test:tire-feel
+
       - name: Low-speed braking regression
         run: npm run test:low-speed-brake
 
