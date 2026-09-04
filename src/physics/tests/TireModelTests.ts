@@ -114,6 +114,56 @@ assert(
   'deep wheelspin/lock must settle below peak longitudinal grip'
 );
 
+// ---------------------------------------------------------------------------
+// Independent lateral/longitudinal stiffness + broader road-tire working range
+// ---------------------------------------------------------------------------
+const progressiveConfig: TireModelConfig = {
+  ...config,
+  longitudinalStiffnessB: 15,
+  lateralStiffnessB: 13.5,
+  slideFrictionMultiplier: 0.86,
+};
+const progressiveTire = new TireModel(progressiveConfig);
+const progressiveCalculate = (slipRatio: number, slipAngle: number) =>
+  progressiveTire.calculate({
+    slipRatio,
+    slipAngle,
+    verticalLoad: 6200,
+    camberDeg: 0,
+    surfaceFriction: 1,
+    isLeft: true,
+  });
+const progressiveLongitudinal = Array.from({ length: 121 }, (_, i) => i * 0.0025)
+  .map((slipRatio) => ({ slipRatio, output: progressiveCalculate(slipRatio, 0) }));
+const progressiveLongPeak = progressiveLongitudinal.reduce((peak, sample) =>
+  Math.abs(sample.output.fx) > Math.abs(peak.output.fx) ? sample : peak
+);
+const progressiveLateral = Array.from({ length: 141 }, (_, i) => i * 0.002)
+  .map((slipAngle) => ({ slipAngle, output: progressiveCalculate(0, slipAngle) }));
+const progressiveLatPeak = progressiveLateral.reduce((peak, sample) =>
+  Math.abs(sample.output.fy) > Math.abs(peak.output.fy) ? sample : peak
+);
+
+assert(
+  Math.abs(progressiveLongPeak.slipRatio - longitudinalPeak.slipRatio) < 0.003,
+  `lateral-stiffness tuning must not move longitudinal peak: base=${longitudinalPeak.slipRatio} tuned=${progressiveLongPeak.slipRatio}`
+);
+assert(
+  progressiveLatPeak.slipAngle > lateralPeak.slipAngle + 0.01 &&
+    progressiveLatPeak.slipAngle < 0.17,
+  `progressive lateral peak should move into a broader 8-9.5 deg road-tire window: base=${lateralPeak.slipAngle} tuned=${progressiveLatPeak.slipAngle}`
+);
+assert(
+  Math.abs(progressiveLatPeak.output.fy / lateralPeak.output.fy - 1) < 0.01,
+  'broader lateral curve must preserve peak lateral force rather than hiding a mu increase'
+);
+const progressiveDeepSlide = Math.abs(progressiveCalculate(0, 0.50).fy);
+const baseDeepSlide = Math.abs(calculate(0, 0.50).fy);
+assert(
+  progressiveDeepSlide > baseDeepSlide,
+  'progressive slide calibration should retain more lateral force after breakaway'
+);
+
 console.log(JSON.stringify({
   pureLongitudinal: {
     peakSlipRatio: longitudinalPeak.slipRatio,

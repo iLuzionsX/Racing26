@@ -203,6 +203,32 @@ html[data-driving-mobile='true'] .mobile-steering-wheel-center-mark {
   box-shadow: 0 0 10px rgb(56 189 248 / 0.6);
 }
 
+html[data-driving-mobile='true'] #mobile-steering-wheel[data-saturation='approaching'] {
+  border-color: rgb(250 204 21 / 0.58);
+  box-shadow:
+    0 14px 32px rgb(0 0 0 / 0.34),
+    0 0 0 1px rgb(250 204 21 / 0.18),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+html[data-driving-mobile='true'] #mobile-steering-wheel[data-saturation='approaching'] .mobile-steering-wheel-center-mark {
+  background: rgb(250 204 21 / 0.9);
+  box-shadow: 0 0 10px rgb(250 204 21 / 0.5);
+}
+
+html[data-driving-mobile='true'] #mobile-steering-wheel[data-saturation='at-limit'] {
+  border-color: rgb(249 115 22 / 0.82);
+  box-shadow:
+    0 14px 32px rgb(0 0 0 / 0.34),
+    0 0 0 1px rgb(249 115 22 / 0.26),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+html[data-driving-mobile='true'] #mobile-steering-wheel[data-saturation='at-limit'] .mobile-steering-wheel-center-mark {
+  background: rgb(249 115 22 / 0.95);
+  box-shadow: 0 0 12px rgb(249 115 22 / 0.6);
+}
+
 html[data-driving-mobile='true'] #mobile-steering-wheel:focus-visible {
   outline: 2px solid rgb(125 211 252 / 0.95);
   outline-offset: 3px;

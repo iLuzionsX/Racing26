@@ -18,6 +18,7 @@ import { TuningModal } from './components/TuningModal';
 import { PhysicsTestRunnerModal } from './components/PhysicsTestRunnerModal';
 import { AssettoCorsaImportPanel } from './components/AssettoCorsaImportPanel';
 import { StartMenu, type DrivingEnvironment } from './components/StartMenu';
+import { frontTireSaturationLevel } from './components/tireSaturationCue';
 import type { Kn5VisualResult } from './graphics/kn5Loader';
 import { loadBundledM5Visual } from './graphics/bundledM5Visual';
 
@@ -669,6 +670,14 @@ export default function App() {
     }
   };
 
+  const frontSaturationForWheel = frontTireSaturationLevel(
+    vehicleTelemetry.wheels.slice(0, 2).map((wheel) => ({
+      gripUtilization: wheel.gripUtilization,
+      slipAngleRad: wheel.slipAngle,
+      steerAngleRad: wheel.steerAngle,
+    }))
+  );
+
   return (
     <div
       ref={containerRef}
@@ -724,6 +733,7 @@ export default function App() {
         activeKeys={activeKeys}
         onTouchInput={handleTouchInput}
         onTouchSteer={handleTouchSteer}
+        frontSaturationLevel={frontSaturationForWheel}
         isAutomatic={vehicleTelemetry.isAutomatic}
         onSetAutomatic={(automatic) => {
           if (physicsEngineRef.current) {

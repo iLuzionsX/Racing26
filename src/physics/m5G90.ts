@@ -54,14 +54,21 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
 
   tireGripFront: 1.21,
   tireGripRear: 1.20,
+  // Preserve the validated pure-slip force curve and measured peak grip.
+  // The feel fix below targets transient response and post-peak retention rather
+  // than weakening cornering stiffness, which the full-car tests showed reduces
+  // useful lateral acceleration.
   tireStiffness: 15.0,
+  tireLongitudinalStiffnessB: 15.0,
+  tireLateralStiffnessB: 15.0,
   tireLoadSensitivity: 0.000030,
-  slideFrictionMultiplier: 0.83,
-  // The G90's heavy chassis should not see peak lateral tire force in the same
-  // 120 Hz frame as a steering step. A longer lateral relaxation length gives the
-  // contact patch/carcass time to take a set before load reaches the sprung body.
-  // Longitudinal relaxation remains independent below so acceleration/braking
-  // response is unchanged.
+  // Keep peak mu unchanged; retain slightly more force once the tire is clearly
+  // past the peak so recovery is progressive instead of an abrupt ice-like drop.
+  slideFrictionMultiplier: 0.86,
+  // Keep the validated lateral transient calibration. Full-car testing showed
+  // that shortening this value reduced useful corner force in the coupled
+  // wheel/chassis response, so the grip-feel change is intentionally confined
+  // to post-peak tire behavior below.
   relaxationLength: 0.50,
   longitudinalRelaxationLength: 0.12,
   longitudinalForceRelaxationLength: 0.066,
@@ -85,7 +92,13 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
   airbrakeEnabled: false,
 
   drivetrain: 'AWD',
+  // BMW documents the G90's Active M Differential as the electronically
+  // controlled rear-axle unit; M xDrive's transfer-case clutch handles the
+  // variable front/rear split. Do not apply the rear active-lock law to the
+  // front axle, where it biases drive torque toward the slower inside wheel.
   differentialType: 'TORQUE_VECTOR',
+  frontDifferentialType: 'OPEN',
+  rearDifferentialType: 'TORQUE_VECTOR',
   centerFrontTorqueRatio: 0.40,
   diffPowerRamp: 0.88,
   diffCoastRamp: 0.48,

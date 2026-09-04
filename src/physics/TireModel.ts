@@ -3,6 +3,9 @@ import { PhysicsMath } from './math/PhysicsMath';
 export interface TireModelConfig {
   baseGrip: number;
   stiffnessB: number;
+  /** Optional axle/model-specific stiffness factors; fallback to stiffnessB. */
+  longitudinalStiffnessB?: number;
+  lateralStiffnessB?: number;
   loadSensitivity: number;
   slideFrictionMultiplier: number;
   relaxationLength: number;
@@ -150,8 +153,10 @@ export class TireModel {
     const kappa = PhysicsMath.clamp(input.slipRatio, -3, 3);
     const alpha = PhysicsMath.clamp(input.slipAngle, -1.2, 1.2);
 
-    const bx = Math.max(1.0, this.config.stiffnessB * 0.95 * normalizedStiffnessScale);
-    const by = Math.max(1.0, this.config.stiffnessB * 0.82 * normalizedStiffnessScale);
+    const longitudinalStiffnessB = this.config.longitudinalStiffnessB ?? this.config.stiffnessB;
+    const lateralStiffnessB = this.config.lateralStiffnessB ?? this.config.stiffnessB;
+    const bx = Math.max(1.0, longitudinalStiffnessB * 0.95 * normalizedStiffnessScale);
+    const by = Math.max(1.0, lateralStiffnessB * 0.82 * normalizedStiffnessScale);
     const cx = PhysicsMath.clamp(this.config.longitudinalShapeC ?? 1.65, 1.1, 2.0);
     const cy = PhysicsMath.clamp(this.config.lateralShapeC ?? 1.60, 1.1, 2.0);
     const ex = PhysicsMath.clamp(this.config.longitudinalCurvatureE ?? 0.45, -0.5, 0.95);

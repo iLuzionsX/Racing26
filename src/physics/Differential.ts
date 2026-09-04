@@ -3,6 +3,9 @@ import { PhysicsMath } from './math/PhysicsMath';
 
 export interface DifferentialConfig {
   type: DifferentialType;
+  /** Optional per-axle types for AWD diagnostics/calibration. Defaults to type. */
+  frontType?: DifferentialType;
+  rearType?: DifferentialType;
   powerRamp: number; // 0..1 (e.g. 0.70)
   coastRamp: number; // 0..1 (e.g. 0.35)
   preloadTorque: number; // Nm (e.g. 45)
@@ -34,14 +37,24 @@ export class DifferentialSystem {
     const torques: [number, number, number, number] = [0, 0, 0, 0];
 
     if (this.config.drivetrain === 'FWD') {
-      const diffOut = this.solveAxleDifferential(inputTorque, omegaFL, omegaFR);
+      const diffOut = this.solveAxleDifferential(
+        inputTorque,
+        omegaFL,
+        omegaFR,
+        this.config.frontType ?? this.config.type
+      );
       torques[0] = diffOut.torqueLeft;
       torques[1] = diffOut.torqueRight;
       return { wheelTorques: torques, pinionSpeed: diffOut.carrierSpeed };
     }
 
     if (this.config.drivetrain === 'RWD') {
-      const diffOut = this.solveAxleDifferential(inputTorque, omegaRL, omegaRR);
+      const diffOut = this.solveAxleDifferential(
+        inputTorque,
+        omegaRL,
+        omegaRR,
+        this.config.rearType ?? this.config.type
+      );
       torques[2] = diffOut.torqueLeft;
       torques[3] = diffOut.torqueRight;
       return { wheelTorques: torques, pinionSpeed: diffOut.carrierSpeed };
@@ -57,8 +70,18 @@ export class DifferentialSystem {
     const frontRatio = PhysicsMath.clamp(baseFrontRatio + rearOverspeed * 0.28, 0.20, 0.50);
     const rearRatio = 1.0 - frontRatio;
 
-    const frontDiff = this.solveAxleDifferential(inputTorque * frontRatio, omegaFL, omegaFR);
-    const rearDiff = this.solveAxleDifferential(inputTorque * rearRatio, omegaRL, omegaRR);
+    const frontDiff = this.solveAxleDifferential(
+      inputTorque * frontRatio,
+      omegaFL,
+      omegaFR,
+      this.config.frontType ?? this.config.type
+    );
+    const rearDiff = this.solveAxleDifferential(
+      inputTorque * rearRatio,
+      omegaRL,
+      omegaRR,
+      this.config.rearType ?? this.config.type
+    );
 
     torques[0] = frontDiff.torqueLeft;
     torques[1] = frontDiff.torqueRight;
@@ -80,7 +103,8 @@ export class DifferentialSystem {
   private solveAxleDifferential(
     inputTorque: number,
     omegaLeft: number,
-    omegaRight: number
+    omegaRight: number,
+    type: DifferentialType = this.config.type
   ): {
     torqueLeft: number;
     torqueRight: number;
@@ -89,7 +113,7 @@ export class DifferentialSystem {
     const carrierSpeed = (omegaLeft + omegaRight) * 0.5;
     const deltaOmega = omegaLeft - omegaRight;
 
-    if (this.config.type === 'OPEN') {
+    if (type === 'OPEN') {
       return {
         torqueLeft: inputTorque * 0.5,
         torqueRight: inputTorque * 0.5,
@@ -97,7 +121,7 @@ export class DifferentialSystem {
       };
     }
 
-    if (this.config.type === 'SPOOL') {
+    if (type === 'SPOOL') {
       const lockTorque = deltaOmega * 800.0;
       return {
         torqueLeft: inputTorque * 0.5 - lockTorque,
@@ -128,7 +152,7 @@ export class DifferentialSystem {
     // fights the necessary Ackermann wheel-speed difference in a parking-speed turn
     // and can excite the explicit wheel rotational DOFs. Fade active-diff preload in
     // with meaningful drive/coast torque; mechanical LSD-style types retain preload.
-    const activePreloadEngagement = this.config.type === 'TORQUE_VECTOR'
+    const activePreloadEngagement = type === 'TORQUE_VECTOR'
       ? PhysicsMath.clamp(Math.abs(inputTorque) / Math.max(40, preload * 2), 0, 1)
       : 1;
     const effectivePreload = preload * activePreloadEngagement;

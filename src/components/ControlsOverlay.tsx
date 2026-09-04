@@ -20,6 +20,14 @@ import {
   type MobileControlOrientation,
 } from './mobileControlLayout';
 import {
+  MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
+  MOBILE_STEERING_WHEEL_MAX_ROTATION_DEG,
+  MOBILE_STEERING_WHEEL_MIN_ROTATION_DEG,
+  loadMobileSteeringRotationDeg,
+  saveMobileSteeringRotationDeg,
+  sanitizeMobileSteeringRotationDeg,
+} from './mobileControls';
+import {
   Activity,
   Camera,
   Car,
@@ -51,6 +59,7 @@ interface ControlsOverlayProps {
   activeKeys: { [key: string]: boolean };
   onTouchInput: (action: 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake', active: boolean) => void;
   onTouchSteer: (value: number, active: boolean) => void;
+  frontSaturationLevel?: number;
   isAutomatic: boolean;
   onSetAutomatic: (automatic: boolean) => void;
   steeringInputMode: SteeringInputMode;
@@ -94,6 +103,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   activeKeys,
   onTouchInput,
   onTouchSteer,
+  frontSaturationLevel = 0,
   isAutomatic,
   onSetAutomatic,
   steeringInputMode,
@@ -116,6 +126,9 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     cloneMobileControlLayoutStore(loadMobileControlLayoutStore())
   );
   const [mobileLayoutEditing, setMobileLayoutEditing] = React.useState(false);
+  const [mobileSteeringRotationDeg, setMobileSteeringRotationDeg] = React.useState(() =>
+    loadMobileSteeringRotationDeg()
+  );
   const activePreset = VEHICLE_PRESETS[activePresetKey] || VEHICLE_PRESETS.sportGT;
 
   const isW = activeKeys['KeyW'] || activeKeys['ArrowUp'];
@@ -221,6 +234,13 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     }));
   };
 
+  const updateMobileSteeringRotation = (rotationDeg: number) => {
+    neutralizeMobileControls();
+    const next = sanitizeMobileSteeringRotationDeg(rotationDeg);
+    setMobileSteeringRotationDeg(next);
+    saveMobileSteeringRotationDeg(next);
+  };
+
   const activeMobileLayout =
     (mobileLayoutEditing ? mobileLayoutDraft : mobileLayout)[mobileOrientation];
 
@@ -322,6 +342,36 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
                     {mobileOrientation}
                   </span>
                 </div>
+
+                <label className="mt-3 block rounded-xl bg-slate-900/65 p-2.5">
+                  <div className="mb-1 flex items-center justify-between text-[8px] font-bold text-slate-300">
+                    <span>Steering rotation</span>
+                    <span className="text-sky-300">{Math.round(mobileSteeringRotationDeg)}°</span>
+                  </div>
+                  <input
+                    id="mobile-steering-rotation"
+                    type="range"
+                    min={MOBILE_STEERING_WHEEL_MIN_ROTATION_DEG}
+                    max={MOBILE_STEERING_WHEEL_MAX_ROTATION_DEG}
+                    step={90}
+                    value={mobileSteeringRotationDeg}
+                    onChange={(event) => updateMobileSteeringRotation(Number(event.target.value))}
+                    className="w-full accent-sky-400"
+                    aria-label="Mobile steering wheel lock-to-lock rotation"
+                  />
+                  <div className="mt-1 flex items-center justify-between text-[7px] text-slate-500">
+                    <span>360° quick</span>
+                    <span>
+                      {mobileSteeringRotationDeg === MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG
+                        ? 'Road-car default'
+                        : 'Full rack preserved'}
+                    </span>
+                    <span>1080° fine</span>
+                  </div>
+                  <div className="mt-1.5 text-[8px] leading-relaxed text-slate-500">
+                    Higher rotation gives finer control before the front tires saturate. Full mechanical lock is still available.
+                  </div>
+                </label>
 
                 {!mobileLayoutEditing ? (
                   <div className="mt-2">
@@ -612,6 +662,8 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           onLayoutChange={updateMobileLayoutDraftPair}
           onTouchInput={onTouchInput}
           onTouchSteer={onTouchSteer}
+          steeringRotationDeg={mobileSteeringRotationDeg}
+          frontSaturationLevel={frontSaturationLevel}
           onNextCamera={onNextCamera}
           onReset={onReset}
         />

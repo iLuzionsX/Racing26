@@ -79,9 +79,11 @@ export class Vehicle {
     const tireRadius = this.config.wheelRadius;
     const wheelInertia = this.config.wheelInertia;
 
-    const tireConfigFront = {
-      baseGrip: this.config.tireGripFront,
+    const makeTireConfig = (isFront: boolean) => ({
+      baseGrip: isFront ? this.config.tireGripFront : this.config.tireGripRear,
       stiffnessB: this.config.tireStiffness,
+      longitudinalStiffnessB: (this.config as any).tireLongitudinalStiffnessB,
+      lateralStiffnessB: (this.config as any).tireLateralStiffnessB,
       loadSensitivity: this.config.tireLoadSensitivity,
       slideFrictionMultiplier: this.config.slideFrictionMultiplier,
       relaxationLength: this.config.relaxationLength,
@@ -91,21 +93,24 @@ export class Vehicle {
       camberStiffness: 85,
       optimalTemp: this.config.optimalTireTemp,
       basePressurePsi: this.config.tireBasePressure,
-    };
+      referenceLoadN: isFront
+        ? ((this.config as any).tireReferenceLoadFrontN ?? (this.config as any).tireReferenceLoadN)
+        : ((this.config as any).tireReferenceLoadRearN ?? (this.config as any).tireReferenceLoadN),
+      longitudinalGripScale: (this.config as any).tireLongitudinalGripScale,
+      lateralGripScale: (this.config as any).tireLateralGripScale,
+      longitudinalShapeC: (this.config as any).tireLongitudinalShapeC,
+      lateralShapeC: (this.config as any).tireLateralShapeC,
+      longitudinalCurvatureE: (this.config as any).tireLongitudinalCurvatureE,
+      lateralCurvatureE: (this.config as any).tireLateralCurvatureE,
+      combinedSlipLongitudinalB: (this.config as any).tireCombinedSlipLongitudinalB,
+      combinedSlipLateralB: (this.config as any).tireCombinedSlipLateralB,
+      combinedSlipExponent: (this.config as any).tireCombinedSlipExponent,
+      sidewallStiffness: (this.config as any).tireSidewallStiffness,
+      verticalStiffness: (this.config as any).tireVerticalStiffness,
+    });
 
-    const tireConfigRear = {
-      baseGrip: this.config.tireGripRear,
-      stiffnessB: this.config.tireStiffness,
-      loadSensitivity: this.config.tireLoadSensitivity,
-      slideFrictionMultiplier: this.config.slideFrictionMultiplier,
-      relaxationLength: this.config.relaxationLength,
-      longitudinalRelaxationLength: (this.config as any).longitudinalRelaxationLength,
-      longitudinalForceRelaxationLength: (this.config as any).longitudinalForceRelaxationLength,
-      pneumaticTrailMax: this.config.tirePneumaticTrailMax,
-      camberStiffness: 85,
-      optimalTemp: this.config.optimalTireTemp,
-      basePressurePsi: this.config.tireBasePressure,
-    };
+    const tireConfigFront = makeTireConfig(true);
+    const tireConfigRear = makeTireConfig(false);
 
     this.wheels = [
       new WheelDynamics({ id: 'FL', isFront: true, isLeft: true, radius: tireRadius, inertia: wheelInertia, tireConfig: tireConfigFront }),
@@ -145,6 +150,8 @@ export class Vehicle {
     // 4. Differential
     this.differential = new DifferentialSystem({
       type: this.config.differentialType,
+      frontType: (this.config as any).frontDifferentialType,
+      rearType: (this.config as any).rearDifferentialType,
       powerRamp: this.config.diffPowerRamp,
       coastRamp: this.config.diffCoastRamp,
       preloadTorque: this.config.diffPreloadTorque,
@@ -236,6 +243,8 @@ export class Vehicle {
 
     this.differential.config = {
       type: newConfig.differentialType,
+      frontType: (newConfig as any).frontDifferentialType,
+      rearType: (newConfig as any).rearDifferentialType,
       powerRamp: newConfig.diffPowerRamp,
       coastRamp: newConfig.diffCoastRamp,
       preloadTorque: newConfig.diffPreloadTorque,
@@ -285,6 +294,8 @@ export class Vehicle {
       this.wheels[i].tireConfig = {
         baseGrip: isFront ? newConfig.tireGripFront : newConfig.tireGripRear,
         stiffnessB: newConfig.tireStiffness,
+        longitudinalStiffnessB: (newConfig as any).tireLongitudinalStiffnessB,
+        lateralStiffnessB: (newConfig as any).tireLateralStiffnessB,
         loadSensitivity: newConfig.tireLoadSensitivity,
         slideFrictionMultiplier: newConfig.slideFrictionMultiplier,
         relaxationLength: newConfig.relaxationLength,
@@ -294,6 +305,20 @@ export class Vehicle {
         camberStiffness: 85,
         optimalTemp: newConfig.optimalTireTemp,
         basePressurePsi: newConfig.tireBasePressure,
+        referenceLoadN: isFront
+          ? ((newConfig as any).tireReferenceLoadFrontN ?? (newConfig as any).tireReferenceLoadN)
+          : ((newConfig as any).tireReferenceLoadRearN ?? (newConfig as any).tireReferenceLoadN),
+        longitudinalGripScale: (newConfig as any).tireLongitudinalGripScale,
+        lateralGripScale: (newConfig as any).tireLateralGripScale,
+        longitudinalShapeC: (newConfig as any).tireLongitudinalShapeC,
+        lateralShapeC: (newConfig as any).tireLateralShapeC,
+        longitudinalCurvatureE: (newConfig as any).tireLongitudinalCurvatureE,
+        lateralCurvatureE: (newConfig as any).tireLateralCurvatureE,
+        combinedSlipLongitudinalB: (newConfig as any).tireCombinedSlipLongitudinalB,
+        combinedSlipLateralB: (newConfig as any).tireCombinedSlipLateralB,
+        combinedSlipExponent: (newConfig as any).tireCombinedSlipExponent,
+        sidewallStiffness: (newConfig as any).tireSidewallStiffness,
+        verticalStiffness: (newConfig as any).tireVerticalStiffness,
       };
     }
   }

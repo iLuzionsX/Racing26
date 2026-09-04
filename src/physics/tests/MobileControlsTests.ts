@@ -1,16 +1,32 @@
 import assert from 'node:assert/strict';
 import {
+  MOBILE_STEERING_ROTATION_STORAGE_KEY,
+  MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION,
+  MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
   MOBILE_STEERING_WHEEL_MAX_DEG,
+  MOBILE_STEERING_WHEEL_MAX_ROTATION_DEG,
+  MOBILE_STEERING_WHEEL_MIN_ROTATION_DEG,
+  advanceMobileWheelPointerMotion,
   advanceMobileWheelRotationDeg,
   clampMobileWheelRotationDeg,
+  isMobileWheelPointerNearCenter,
+  loadMobileSteeringRotationDeg,
   mapMobileSteeringDirection,
   mobileWheelGrabOffsetDeg,
+  mobileWheelMaxRotationDeg,
   mobileWheelPointerAngleDeg,
+  mobileWheelPointerRadiusPx,
   mobileWheelRotationToSteer,
   mobileWheelSteerToRotationDeg,
   resolveMobileWheelRotationDeg,
+  sanitizeMobileSteeringRotationDeg,
+  saveMobileSteeringRotationDeg,
   wrapAngleDeg,
 } from '../../components/mobileControls';
+import {
+  frontTireSaturationLevel,
+  frontTireSaturationState,
+} from '../../components/tireSaturationCue';
 import {
   DEFAULT_MOBILE_CONTROL_LAYOUT,
   MOBILE_CONTROL_LAYOUT_STORAGE_KEY,
@@ -33,13 +49,17 @@ assert.notEqual(mapMobileSteeringDirection('left'), mapMobileSteeringDirection('
 assert.equal(mobileWheelPointerAngleDeg(0, 0, 0, -10), 0);
 assert.equal(mobileWheelPointerAngleDeg(0, 0, 10, 0), 90);
 assert.equal(mobileWheelPointerAngleDeg(0, 0, -10, 0), -90);
+assert.equal(mobileWheelPointerRadiusPx(0, 0, 3, 4), 5);
+assert.equal(MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION, 0.22);
+assert.equal(isMobileWheelPointerNearCenter(4, 100), true);
+assert.equal(isMobileWheelPointerNearCenter(30, 100), false);
 assert.equal(wrapAngleDeg(190), -170);
 assert.equal(wrapAngleDeg(-190), 170);
 assert.equal(wrapAngleDeg(360), 0);
 
 assert.equal(mobileWheelGrabOffsetDeg(45, 0), 45);
 assert.equal(resolveMobileWheelRotationDeg(45, 45), 0);
-assert.equal(resolveMobileWheelRotationDeg(180, 0), MOBILE_STEERING_WHEEL_MAX_DEG);
+assert.equal(resolveMobileWheelRotationDeg(180, 0), 180);
 assert.equal(clampMobileWheelRotationDeg(999), MOBILE_STEERING_WHEEL_MAX_DEG);
 assert.equal(clampMobileWheelRotationDeg(-999), -MOBILE_STEERING_WHEEL_MAX_DEG);
 
@@ -49,6 +69,24 @@ assert.equal(mobileWheelRotationToSteer(0), 0);
 assert.equal(mobileWheelRotationToSteer(2), 0);
 assert.equal(mobileWheelRotationToSteer(-2), 0);
 assert.ok(Math.abs(mobileWheelRotationToSteer(-67.5) + mobileWheelRotationToSteer(67.5)) < 1e-12);
+
+// Default 900-degree lock-to-lock travel should approximate the M5's published
+// 14.2:1 steering ratio against the simulator's 0.58 rad center road-wheel lock.
+assert.equal(MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG, 900);
+assert.equal(mobileWheelMaxRotationDeg(), 450);
+const m5RoadWheelLockDeg = 0.58 * 180 / Math.PI;
+const effectiveSteeringRatio = MOBILE_STEERING_WHEEL_MAX_DEG / m5RoadWheelLockDeg;
+assert(
+  effectiveSteeringRatio > 13.0 && effectiveSteeringRatio < 15.0,
+  `default mobile steering ratio should approximate M5 14.2:1, got ${effectiveSteeringRatio.toFixed(2)}:1`
+);
+const sixtyDegreeSteer = Math.abs(mobileWheelRotationToSteer(60));
+assert(
+  sixtyDegreeSteer > 0.11 && sixtyDegreeSteer < 0.14,
+  `60deg hand-wheel input should remain a fine steering request, got ${sixtyDegreeSteer.toFixed(3)}`
+);
+assert.equal(mobileWheelRotationToSteer(-270, 540), 1, 'custom 540deg rotation must retain full-left rack');
+assert.equal(mobileWheelRotationToSteer(270, 540), -1, 'custom 540deg rotation must retain full-right rack');
 assert.equal(mobileWheelSteerToRotationDeg(1), -MOBILE_STEERING_WHEEL_MAX_DEG);
 assert.equal(mobileWheelSteerToRotationDeg(-1), MOBILE_STEERING_WHEEL_MAX_DEG);
 
@@ -64,10 +102,30 @@ assert.equal(
   'Reverse seam crossing must remain mirrored.'
 );
 assert.equal(
-  advanceMobileWheelRotationDeg(134, 10, 30),
+  advanceMobileWheelRotationDeg(MOBILE_STEERING_WHEEL_MAX_DEG - 4, 10, 30),
   MOBILE_STEERING_WHEEL_MAX_DEG,
   'Incremental wheel motion must clamp at full lock without wrapping.'
 );
+
+let pointerMotion = {
+  rotationDeg: 40,
+  lastPointerAngleDeg: 10,
+  needsAngleResync: false,
+};
+pointerMotion = advanceMobileWheelPointerMotion(pointerMotion, 180, true);
+assert.deepEqual(
+  pointerMotion,
+  { rotationDeg: 40, lastPointerAngleDeg: 10, needsAngleResync: true },
+  'Crossing the wheel hub must hold rim rotation instead of trusting an unstable angle.'
+);
+pointerMotion = advanceMobileWheelPointerMotion(pointerMotion, 12, false);
+assert.deepEqual(
+  pointerMotion,
+  { rotationDeg: 40, lastPointerAngleDeg: 12, needsAngleResync: false },
+  'The first valid sample after the hub must only resync the angular reference.'
+);
+pointerMotion = advanceMobileWheelPointerMotion(pointerMotion, 14, false);
+assert.equal(pointerMotion.rotationDeg, 42, 'Normal rim motion must resume after hub resync.');
 
 assert.equal(mobileControlOrientationForViewport(844, 390), 'landscape');
 assert.equal(mobileControlOrientationForViewport(390, 844), 'portrait');
@@ -133,5 +191,67 @@ const memoryStorage: StorageLike = {
 saveMobileControlLayoutStore(sanitized, memoryStorage);
 assert.ok(storageMap.has(MOBILE_CONTROL_LAYOUT_STORAGE_KEY));
 assert.deepEqual(loadMobileControlLayoutStore(memoryStorage), sanitized);
+
+assert.equal(sanitizeMobileSteeringRotationDeg(100), MOBILE_STEERING_WHEEL_MIN_ROTATION_DEG);
+assert.equal(sanitizeMobileSteeringRotationDeg(2000), MOBILE_STEERING_WHEEL_MAX_ROTATION_DEG);
+assert.equal(sanitizeMobileSteeringRotationDeg(Number.NaN), MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG);
+assert.equal(loadMobileSteeringRotationDeg(memoryStorage), MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG);
+assert.equal(saveMobileSteeringRotationDeg(720, memoryStorage), 720);
+assert.equal(storageMap.get(MOBILE_STEERING_ROTATION_STORAGE_KEY), '720');
+assert.equal(loadMobileSteeringRotationDeg(memoryStorage), 720);
+
+const DEG_RAD = Math.PI / 180;
+const saturation = (
+  gripUtilization: number,
+  slipDeg: number,
+  steerDeg: number
+) => frontTireSaturationLevel([
+  {
+    gripUtilization,
+    slipAngleRad: slipDeg * DEG_RAD,
+    steerAngleRad: steerDeg * DEG_RAD,
+  },
+  {
+    gripUtilization,
+    slipAngleRad: -slipDeg * DEG_RAD,
+    steerAngleRad: -steerDeg * DEG_RAD,
+  },
+]);
+
+assert.equal(
+  frontTireSaturationState(saturation(0.99, 0.5, 0)),
+  'none',
+  'straight-line high grip utilization must not falsely report front corner saturation'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.60, 3.0, 3.0)),
+  'none',
+  'ordinary low-slip cornering must stay quiet'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.70, 6.5, 4.0)),
+  'approaching',
+  'front slip approaching the peak must provide a subtle warning'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.80, 8.5, 5.0)),
+  'at-limit',
+  'front slip at the calibrated peak boundary must show the at-limit cue'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.99, 2.0, 3.0)),
+  'at-limit',
+  'near-envelope front utilization while steering must show the at-limit cue'
+);
+
+const leftCue = frontTireSaturationLevel([
+  { gripUtilization: 0.88, slipAngleRad: 7 * DEG_RAD, steerAngleRad: 5 * DEG_RAD },
+  { gripUtilization: 0.82, slipAngleRad: 6 * DEG_RAD, steerAngleRad: 4 * DEG_RAD },
+]);
+const rightCue = frontTireSaturationLevel([
+  { gripUtilization: 0.82, slipAngleRad: -6 * DEG_RAD, steerAngleRad: -4 * DEG_RAD },
+  { gripUtilization: 0.88, slipAngleRad: -7 * DEG_RAD, steerAngleRad: -5 * DEG_RAD },
+]);
+assert.equal(leftCue, rightCue, 'front saturation cue must mirror left/right exactly');
 
 console.log('MobileControlsTests: PASS');

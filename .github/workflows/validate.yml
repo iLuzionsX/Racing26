@@ -44,6 +44,15 @@ jobs:
       - name: Physics convention guardrails
         run: npm run test:conventions
 
+      - name: Mobile controls regression
+        run: npm run test:mobile
+
+      - name: Hand-wheel tire-feel sweep
+        run: npm run test:tire-feel
+
+      - name: Front differential corner-exit diagnostic
+        run: npm run test:front-diff
+
       - name: Low-speed braking regression
         run: npm run test:low-speed-brake
 

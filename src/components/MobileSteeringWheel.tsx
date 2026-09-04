@@ -1,29 +1,51 @@
 import React from 'react';
 import {
-  advanceMobileWheelRotationDeg,
+  MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
+  advanceMobileWheelPointerMotion,
+  clampMobileWheelRotationDeg,
+  isMobileWheelPointerNearCenter,
+  mobileWheelMaxRotationDeg,
   mobileWheelPointerAngleDeg,
+  mobileWheelPointerRadiusPx,
   mobileWheelRotationToSteer,
 } from './mobileControls';
+import { frontTireSaturationState } from './tireSaturationCue';
 
 export const MobileSteeringWheel: React.FC<{
   onSteerChange: (value: number, active: boolean) => void;
   interactionEnabled?: boolean;
-}> = ({ onSteerChange, interactionEnabled = true }) => {
+  steeringRotationDeg?: number;
+  frontSaturationLevel?: number;
+}> = ({
+  onSteerChange,
+  interactionEnabled = true,
+  steeringRotationDeg = MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
+  frontSaturationLevel = 0,
+}) => {
   const [rotationDeg, setRotationDeg] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
-  const pointerRef = React.useRef<{ id: number; lastPointerAngleDeg: number } | null>(null);
+  const pointerRef = React.useRef<{
+    id: number;
+    lastPointerAngleDeg: number;
+    needsAngleResync: boolean;
+  } | null>(null);
   const rotationRef = React.useRef(0);
   const onSteerChangeRef = React.useRef(onSteerChange);
+  const saturationState = frontTireSaturationState(frontSaturationLevel);
 
   React.useEffect(() => {
     onSteerChangeRef.current = onSteerChange;
   }, [onSteerChange]);
 
   const reportRotation = React.useCallback((nextRotationDeg: number, active: boolean) => {
-    rotationRef.current = nextRotationDeg;
-    setRotationDeg(nextRotationDeg);
-    onSteerChangeRef.current(mobileWheelRotationToSteer(nextRotationDeg), active);
-  }, []);
+    const clamped = clampMobileWheelRotationDeg(nextRotationDeg, steeringRotationDeg);
+    rotationRef.current = clamped;
+    setRotationDeg(clamped);
+    onSteerChangeRef.current(
+      mobileWheelRotationToSteer(clamped, steeringRotationDeg),
+      active
+    );
+  }, [steeringRotationDeg]);
 
   const release = React.useCallback(() => {
     pointerRef.current = null;
@@ -34,6 +56,18 @@ export const MobileSteeringWheel: React.FC<{
   React.useEffect(() => {
     if (!interactionEnabled) release();
   }, [interactionEnabled, release]);
+
+  React.useEffect(() => {
+    const clamped = clampMobileWheelRotationDeg(rotationRef.current, steeringRotationDeg);
+    if (clamped !== rotationRef.current) {
+      reportRotation(clamped, dragging);
+    } else if (dragging) {
+      onSteerChangeRef.current(
+        mobileWheelRotationToSteer(clamped, steeringRotationDeg),
+        true
+      );
+    }
+  }, [steeringRotationDeg, dragging, reportRotation]);
 
   React.useEffect(() => {
     const onBlur = () => release();
@@ -53,53 +87,82 @@ export const MobileSteeringWheel: React.FC<{
     };
   }, [release]);
 
-  const pointerAngleForEvent = (event: React.PointerEvent<HTMLDivElement>) => {
+  const pointerPolarForEvent = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    return mobileWheelPointerAngleDeg(
-      rect.left + rect.width / 2,
-      rect.top + rect.height / 2,
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const wheelRadiusPx = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+    const pointerRadiusPx = mobileWheelPointerRadiusPx(
+      centerX,
+      centerY,
       event.clientX,
       event.clientY
     );
+    return {
+      angleDeg: mobileWheelPointerAngleDeg(
+        centerX,
+        centerY,
+        event.clientX,
+        event.clientY
+      ),
+      nearCenter: isMobileWheelPointerNearCenter(pointerRadiusPx, wheelRadiusPx),
+    };
   };
 
   return (
     <div
       id="mobile-steering-wheel"
       className={`relative touch-none select-none rounded-full ${dragging ? 'is-dragging' : ''}`}
+      data-saturation={saturationState}
       role="slider"
       tabIndex={interactionEnabled ? 0 : -1}
       aria-disabled={!interactionEnabled}
       aria-label="Steering wheel"
       aria-valuemin={-1}
       aria-valuemax={1}
-      aria-valuenow={Number(mobileWheelRotationToSteer(rotationDeg).toFixed(3))}
+      aria-valuenow={Number(
+        mobileWheelRotationToSteer(rotationDeg, steeringRotationDeg).toFixed(3)
+      )}
       onPointerDown={(event) => {
         if (!interactionEnabled) return;
         event.preventDefault();
         if (pointerRef.current !== null) return;
-        const pointerAngleDeg = pointerAngleForEvent(event);
+        const pointer = pointerPolarForEvent(event);
         pointerRef.current = {
           id: event.pointerId,
-          lastPointerAngleDeg: pointerAngleDeg,
+          lastPointerAngleDeg: pointer.angleDeg,
+          needsAngleResync: pointer.nearCenter,
         };
         setDragging(true);
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        onSteerChangeRef.current(mobileWheelRotationToSteer(rotationRef.current), true);
+        onSteerChangeRef.current(
+          mobileWheelRotationToSteer(rotationRef.current, steeringRotationDeg),
+          true
+        );
       }}
       onPointerMove={(event) => {
         if (!interactionEnabled) return;
         const pointer = pointerRef.current;
         if (!pointer || pointer.id !== event.pointerId) return;
         event.preventDefault();
-        const pointerAngleDeg = pointerAngleForEvent(event);
-        const nextRotationDeg = advanceMobileWheelRotationDeg(
-          rotationRef.current,
-          pointer.lastPointerAngleDeg,
-          pointerAngleDeg
+        const polar = pointerPolarForEvent(event);
+
+        const nextMotion = advanceMobileWheelPointerMotion(
+          {
+            rotationDeg: rotationRef.current,
+            lastPointerAngleDeg: pointer.lastPointerAngleDeg,
+            needsAngleResync: pointer.needsAngleResync,
+          },
+          polar.angleDeg,
+          polar.nearCenter,
+          steeringRotationDeg
         );
-        pointer.lastPointerAngleDeg = pointerAngleDeg;
-        reportRotation(nextRotationDeg, true);
+
+        pointer.lastPointerAngleDeg = nextMotion.lastPointerAngleDeg;
+        pointer.needsAngleResync = nextMotion.needsAngleResync;
+        if (nextMotion.rotationDeg !== rotationRef.current) {
+          reportRotation(nextMotion.rotationDeg, true);
+        }
       }}
       onPointerLeave={(event) => {
         const pointer = pointerRef.current;
@@ -126,13 +189,13 @@ export const MobileSteeringWheel: React.FC<{
       onKeyDown={(event) => {
         if (!interactionEnabled) return;
         let next = rotationRef.current;
-        if (event.key === 'ArrowLeft') next -= 13.5;
-        else if (event.key === 'ArrowRight') next += 13.5;
+        const keyboardStepDeg = mobileWheelMaxRotationDeg(steeringRotationDeg) / 10;
+        if (event.key === 'ArrowLeft') next -= keyboardStepDeg;
+        else if (event.key === 'ArrowRight') next += keyboardStepDeg;
         else if (event.key === 'Home' || event.key === '0') next = 0;
         else return;
         event.preventDefault();
-        const clamped = Math.max(-135, Math.min(135, next));
-        reportRotation(clamped, true);
+        reportRotation(next, true);
       }}
       onKeyUp={(event) => {
         if (!interactionEnabled) return;
