@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock --no-audit --no-fund
 
+      - name: TypeScript runtime wiring check
+        run: npm run lint
+
       - name: Physics conventions
         run: npm run test:conventions
 
