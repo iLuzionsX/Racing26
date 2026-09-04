@@ -1,0 +1,36 @@
+name: Mobile wheel branch CI
+
+on:
+  push:
+    branches:
+      - feature/mobile-analog-steering-wheel
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-package-lock --no-audit --no-fund
+      - name: Mobile controls
+        run: npm run test:mobile
+      - name: Digital steering
+        run: npm run test:digital-steering
+      - name: Mouse steering
+        run: npm run test:mouse-steering
+      - name: Steering direction
+        run: npm run test:steering-direction
+      - name: Physics conventions
+        run: npm run test:conventions
+      - name: Cornering regression
+        run: npm run test:cornering
+      - name: Strict M5 validation
+        run: npm run test:m5-validation:strict
+      - name: Production build
+        run: npm run build -- --base=/Racing26/
