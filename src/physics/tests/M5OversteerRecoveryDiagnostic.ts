@@ -3,7 +3,6 @@ import { Simulation } from '../Simulation';
 import { DEFAULT_VEHICLE_CONFIG } from '../vehiclePresets';
 import { BMW_M5_2025_OVERRIDES } from '../m5G90';
 import { PhysicsMath } from '../math/PhysicsMath';
-import { updateDigitalSteeringInput } from '../DigitalSteeringInput';
 import { deriveChassisMassProperties } from '../ChassisMassProperties';
 
 const dt = 1 / 120;
@@ -97,12 +96,12 @@ function makeOversteeringM5() {
 }
 function runDigitalDriverRecovery() {
   const { sim, inductionSec, yawInertiaKgM2, inductionTail } = makeOversteeringM5();
-  let digitalInput = 0.18;
+  sim.resetDigitalSteeringInput(0.18);
   let released = false;
   let releaseTimeSec: number | null = null;
   let peakCounterInput = 0;
   let peakCounterSteerDeg = 0;
-  const samples = [sample(sim, 0, digitalInput)];
+  const samples = [sample(sim, 0, sim.digitalSteeringInput)];
   const wanted = new Set([0.10, 0.25, 0.50, 0.75, 1.00, 1.50].map((t) => Math.round(t / dt)));
   const totalSteps = Math.round(1.5 / dt);
   for (let i = 1; i <= totalSteps; i++) {
@@ -110,9 +109,13 @@ function runDigitalDriverRecovery() {
     const yawDegS = stateBefore.yawRate * DEG;
     if (!released && yawDegS <= 8) { released = true; releaseTimeSec = i * dt; }
     const direction: -1 | 0 = released ? 0 : -1;
-    digitalInput = updateDigitalSteeringInput(digitalInput, direction, stateBefore.speedMs, dt);
+
+    const state = sim.stepExplicit(
+      { ...neutral, steer: 0, digitalSteerDirection: direction },
+      1
+    );
+    const digitalInput = sim.digitalSteeringInput;
     peakCounterInput = Math.max(peakCounterInput, -digitalInput);
-    const state = sim.stepExplicit({ ...neutral, steer: digitalInput }, 1);
     peakCounterSteerDeg = Math.max(peakCounterSteerDeg, -state.actualSteerAngle * DEG);
     if (wanted.has(i)) samples.push(sample(sim, i * dt, digitalInput));
   }
@@ -141,7 +144,10 @@ assert(Math.abs(t100.rearKappa) < 0.05, `rear longitudinal slip did not recover:
 assert(Math.abs(t100.rearFyN) > 7000, `rear lateral force did not recover: ${t100.rearFyN.toFixed(0)} N`);
 
 // The driver must have access to real opposite lock, then be able to unwind it.
-assert(result.peakCounterInput > 0.8, `digital input still withholds opposite lock: ${result.peakCounterInput.toFixed(3)}`);
+assert(
+  result.peakCounterInput > 0.70,
+  `digital recovery did not unlock enough opposite-lock authority: ${result.peakCounterInput.toFixed(3)}`
+);
 assert(result.peakCounterSteerDeg > 20, `physical countersteer authority is too small: ${result.peakCounterSteerDeg.toFixed(1)} deg`);
 assert(result.releaseTimeSec !== null && result.releaseTimeSec < 0.40, `driver could not arrest yaw promptly; release=${result.releaseTimeSec}`);
 

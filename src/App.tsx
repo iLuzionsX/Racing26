@@ -6,7 +6,6 @@ import { BMW_M5_2025_OVERRIDES } from './physics/m5G90';
 import { disableM5TwoWheelDrive, enableM5TwoWheelDrive } from './physics/m5DriveMode';
 import type { M5XDriveRestoreSnapshot } from './physics/m5DriveMode';
 import { VehiclePhysicsEngine } from './physics/vehiclePhysics';
-import { updateDigitalSteeringInput } from './physics/DigitalSteeringInput';
 import { mouseSteeringFromClientX, type SteeringInputMode } from './physics/MouseSteeringInput';
 import { CarRenderer } from './graphics/carRenderer';
 import { EnvironmentManager } from './graphics/environment';
@@ -333,35 +332,27 @@ export default function App() {
       const brakeInput = isBrake ? 1.0 : 0;
       const touchSteeringActive = touches.steerLeft || touches.steerRight;
       const touchAnalogSteeringActive = touchSteerActiveRef.current && !inputBlocked;
-      let steerInput: number;
+      let steerInput = 0;
+      let digitalSteerDirection: -1 | 0 | 1 | undefined;
 
       if (touchAnalogSteeringActive) {
-        // The on-screen wheel is a true analog rack command, like mouse steering:
-        // the player chooses the steering fraction directly instead of holding a
-        // binary full-lock button. Keep the full mechanical rack available.
-        physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction = 0;
+        // The on-screen wheel is true analog steering. It deliberately keeps full
+        // physical rack authority and bypasses the binary Digital Driver model.
+        physicsEngine.simulation.resetDigitalSteeringInput(0);
         digitalSteerInputRef.current = 0;
         steerInput = touchSteerInputRef.current;
       } else if (steeringInputModeRef.current === 'mouse' && !touchSteeringActive && !inputBlocked) {
-        // Mouse/wheel-style analog input represents a fraction of the physical
-        // steering rack. BMW's speed sensitivity changes assistance/ratio, not
-        // the mechanical lock, so bypass the keyboard-only road-speed angle cap.
-        physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction = 0;
+        // Mouse steering is analog too: no speed amplitude cap and no hidden
+        // stability aid. The physical rack/tire model remains authoritative.
+        physicsEngine.simulation.resetDigitalSteeringInput(0);
         digitalSteerInputRef.current = 0;
         steerInput = mouseSteerInputRef.current;
       } else {
-        // Restore the configured speed-shaped rack behavior for binary keyboard
-        // and touch control, where a held button otherwise means instant full lock.
-        physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction =
-          physicsEngine.config.steerSpeedReduction;
-        const steerDirection: -1 | 0 | 1 = isLeft === isRight ? 0 : isLeft ? 1 : -1;
-        digitalSteerInputRef.current = updateDigitalSteeringInput(
-          digitalSteerInputRef.current,
-          steerDirection,
-          physicsEngine.state.speedMs,
-          deltaTime
-        );
-        steerInput = inputBlocked ? 0 : digitalSteerInputRef.current;
+        // Keyboard / binary touch-button intent is integrated inside Simulation
+        // at the same fixed 120 Hz cadence as tires and chassis. This removes
+        // render-FPS-dependent steering while preserving the speed/curvature
+        // envelope and state-gated countersteer recovery.
+        digitalSteerDirection = isLeft === isRight ? 0 : isLeft ? 1 : -1;
       }
 
       const shiftUp = !inputBlocked && (keys['ShiftLeft'] || keys['ShiftRight']);
@@ -375,10 +366,14 @@ export default function App() {
           throttle: throttleInput,
           brake: brakeInput,
           steer: steerInput,
+          digitalSteerDirection,
           handbrake: isHandbrake,
           shiftUp,
           shiftDown,
         });
+        if (digitalSteerDirection !== undefined) {
+          digitalSteerInputRef.current = physicsEngine.simulation.digitalSteeringInput;
+        }
       }
 
       carRenderer.update(state, physicsEngine.config);
@@ -575,6 +570,7 @@ export default function App() {
     steeringInputModeRef.current = mode;
     setSteeringInputMode(mode);
     digitalSteerInputRef.current = 0;
+    physicsEngineRef.current?.simulation.resetDigitalSteeringInput(0);
     mouseSteerInputRef.current = 0;
     if (typeof window !== 'undefined') window.localStorage.setItem(STEERING_INPUT_STORAGE_KEY, mode);
   };

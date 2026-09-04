@@ -4,6 +4,12 @@ import { ISurfaceProvider } from './SurfaceProvider';
 import { PhysicsMath } from './math/PhysicsMath';
 import { stabilizeVehicleAfterImpact } from './CrashStability';
 import { SuspensionKinematicsAdapter } from './SuspensionKinematicsAdapter';
+import { updateDigitalSteeringInput } from './DigitalSteeringInput';
+
+export type SimulationControlInputs = ControlInputs & {
+  /** Binary keyboard/button steering intent. Omit for true analog rack input. */
+  digitalSteerDirection?: -1 | 0 | 1;
+};
 
 export class Simulation {
   public vehicle: Vehicle;
@@ -13,6 +19,8 @@ export class Simulation {
   public accumulatedTime: number = 0;
   public totalSimTime: number = 0;
   public stepCount: number = 0;
+  /** Simulation-owned binary steering state, integrated at the fixed 120 Hz step. */
+  public digitalSteeringInput: number = 0;
 
   private previousState: VehicleState;
   private currentState: VehicleState;
@@ -61,6 +69,7 @@ export class Simulation {
     this.accumulatedTime = 0;
     this.totalSimTime = 0;
     this.stepCount = 0;
+    this.digitalSteeringInput = 0;
     this.previousState = this.vehicle.getState();
     this.currentState = this.vehicle.getState();
   }
@@ -86,11 +95,45 @@ export class Simulation {
     this.previousState = this.currentState;
   }
 
+  public resetDigitalSteeringInput(value: number = 0): void {
+    const safeValue = Number.isFinite(value) ? value : 0;
+    this.digitalSteeringInput = PhysicsMath.clamp(safeValue, -1, 1);
+  }
+
+  private inputsForFixedStep(inputs: SimulationControlInputs): ControlInputs {
+    const direction = inputs.digitalSteerDirection;
+    if (direction !== -1 && direction !== 0 && direction !== 1) return inputs;
+
+    const localVelocity = this.vehicle.rigidBody.getLocalVelocity();
+    const localAngularVelocity = this.vehicle.rigidBody.getLocalAngularVelocity();
+    const speedMs = Math.hypot(localVelocity.x, localVelocity.z);
+    const sideslipRad =
+      speedMs > 0.5
+        ? Math.atan2(localVelocity.x, Math.max(0.5, Math.abs(localVelocity.z)))
+        : 0;
+
+    this.digitalSteeringInput = updateDigitalSteeringInput(
+      this.digitalSteeringInput,
+      direction,
+      speedMs,
+      this.fixedDt,
+      {
+        wheelbaseM: this.vehicle.config.wheelbase,
+        maxSteerAngleRad: this.vehicle.config.maxSteerAngle,
+        yawRateRadS: localAngularVelocity.y,
+        sideslipRad,
+        forwardSpeedMs: localVelocity.z,
+      }
+    );
+
+    return { ...inputs, steer: this.digitalSteeringInput };
+  }
+
   /**
    * Advance simulation by variable render frame deltaTime.
    * Uses fixed 120 Hz accumulator with state interpolation.
    */
-  public advance(deltaTime: number, inputs: ControlInputs): VehicleState {
+  public advance(deltaTime: number, inputs: SimulationControlInputs): VehicleState {
     const clampedDelta = Math.min(deltaTime, 0.1);
     this.accumulatedTime += clampedDelta;
 
@@ -103,7 +146,7 @@ export class Simulation {
 
     while (this.accumulatedTime + timeEpsilon >= this.fixedDt && subStepsTaken < this.maxSubSteps) {
       this.previousState = this.currentState;
-      this.vehicle.step(inputs, this.fixedDt);
+      this.vehicle.step(this.inputsForFixedStep(inputs), this.fixedDt);
       stabilizeVehicleAfterImpact(this.vehicle, this.fixedDt);
       this.currentState = this.vehicle.getState();
 
@@ -122,9 +165,9 @@ export class Simulation {
     return this.interpolateState(this.previousState, this.currentState, alpha);
   }
 
-  public stepExplicit(inputs: ControlInputs, steps: number = 1): VehicleState {
+  public stepExplicit(inputs: SimulationControlInputs, steps: number = 1): VehicleState {
     for (let i = 0; i < steps; i++) {
-      this.vehicle.step(inputs, this.fixedDt);
+      this.vehicle.step(this.inputsForFixedStep(inputs), this.fixedDt);
       stabilizeVehicleAfterImpact(this.vehicle, this.fixedDt);
       this.totalSimTime += this.fixedDt;
       this.stepCount++;

@@ -1,0 +1,73 @@
+name: Digital Driver V3 validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - src/physics/**
+      - src/App.tsx
+      - package.json
+      - .github/workflows/handling-v3.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: App runtime wiring
+        run: node scripts/app-runtime-wiring-check.mjs
+
+      - name: Physics conventions
+        run: npm run test:conventions
+
+      - name: Differential continuity
+        run: npm run test:differential-continuity
+
+      - name: Digital steering unit
+        run: npm run test:digital-steering
+
+      - name: Render-FPS invariance
+        run: npm run test:digital-steering-fps
+
+      - name: Steering direction
+        run: npm run test:steering-direction
+
+      - name: Turn radius
+        run: npm run test:turn-radius
+
+      - name: Low-speed cornering
+        run: npm run test:cornering
+
+      - name: High-speed keyboard cornering
+        run: npm run test:keyboard-cornering
+
+      - name: M5 transient
+        run: npm run test:m5-transient
+
+      - name: M5 oversteer recovery
+        run: npm run test:m5-oversteer
+
+      - name: Strict M5 validation
+        run: npm run test:m5-validation:strict
+
+      - name: Track QA
+        run: npm run test:track
+
+      - name: Production build
+        run: npm run build

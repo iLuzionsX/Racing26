@@ -139,13 +139,25 @@ export class DifferentialSystem {
     const lockActivation = Math.tanh(deltaOmega * 0.35);
     let actualLockTorque = maxLockingTorque * lockActivation;
 
-    // Under meaningful drive/coast torque, keep both axle torques in the same
-    // direction. Preload is still allowed to cross-couple around zero torque for
-    // mechanical LSDs; an active TORQUE_VECTOR unit has already faded preload above.
-    if (Math.abs(inputTorque) > effectivePreload * 2) {
-      const sameSignCap = Math.abs(inputTorque) * 0.48;
-      actualLockTorque = PhysicsMath.clamp(actualLockTorque, -sameSignCap, sameSignCap);
-    }
+    // Keep both axle torques in the same direction once drive/coast torque
+    // overwhelms preload, while preserving mechanical preload cross-coupling
+    // around zero torque. The residual allowance fades continuously to zero at
+    // |input| = 2*effectivePreload instead of switching caps at that threshold.
+    //
+    // For the M5 TORQUE_VECTOR unit, effective preload already fades with input
+    // torque, so this becomes a continuous 0.48*|input| cap through throttle
+    // tip-in and prevents a driven wheel from briefly receiving reverse torque.
+    const residualPreloadAllowance = Math.max(
+      0,
+      effectivePreload - Math.abs(inputTorque) * 0.5
+    );
+    const sameSignCap =
+      Math.abs(inputTorque) * 0.48 + residualPreloadAllowance;
+    actualLockTorque = PhysicsMath.clamp(
+      actualLockTorque,
+      -sameSignCap,
+      sameSignCap
+    );
 
     return {
       torqueLeft: inputTorque * 0.5 - actualLockTorque,
