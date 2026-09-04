@@ -149,6 +149,9 @@ export class Simulation {
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
+      // Render root Y rides on road-relative elevationHeight. Leaving it at curr
+      // bypasses accumulator smoothing and makes body+wheels tick at 120 Hz.
+      elevationHeight: lerp(prev.elevationHeight, curr.elevationHeight, alpha),
       // CarRenderer positions the sprung body from road-relative heave rather than
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
