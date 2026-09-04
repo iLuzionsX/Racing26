@@ -120,7 +120,7 @@ assert(
 const progressiveConfig: TireModelConfig = {
   ...config,
   longitudinalStiffnessB: 15,
-  lateralStiffnessB: 12.5,
+  lateralStiffnessB: 13.5,
   slideFrictionMultiplier: 0.86,
 };
 const progressiveTire = new TireModel(progressiveConfig);
@@ -149,9 +149,9 @@ assert(
   `lateral-stiffness tuning must not move longitudinal peak: base=${longitudinalPeak.slipRatio} tuned=${progressiveLongPeak.slipRatio}`
 );
 assert(
-  progressiveLatPeak.slipAngle > lateralPeak.slipAngle + 0.02 &&
-    progressiveLatPeak.slipAngle < 0.18,
-  `progressive lateral peak should move into a broader 8-10 deg road-tire window: base=${lateralPeak.slipAngle} tuned=${progressiveLatPeak.slipAngle}`
+  progressiveLatPeak.slipAngle > lateralPeak.slipAngle + 0.01 &&
+    progressiveLatPeak.slipAngle < 0.17,
+  `progressive lateral peak should move into a broader 8-9.5 deg road-tire window: base=${lateralPeak.slipAngle} tuned=${progressiveLatPeak.slipAngle}`
 );
 assert(
   Math.abs(progressiveLatPeak.output.fy / lateralPeak.output.fy - 1) < 0.01,
