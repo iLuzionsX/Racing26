@@ -78,8 +78,7 @@ function toTexture(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTextur
   return tex;
 }
 /** Fine asphalt aggregate grain, opaque. */
-export function makeAsphaltAggregateTexture(seed = 0xA5FALT): THREE.CanvasTexture {
-  void 0;
+export function makeAsphaltAggregateTexture(seed = 0xA5FA): THREE.CanvasTexture {
   return makeAggregateInner(seed, '#22262b', 9000);
 }
 function makeAggregateInner(seed: number, base: string, dots: number): THREE.CanvasTexture {
@@ -95,7 +94,7 @@ function makeAggregateInner(seed: number, base: string, dots: number): THREE.Can
   return toTexture(canvas, true);
 }
 /** Dark rubbered racing-line overlay baked opaque, no alpha blend needed. */
-export function makeRubberedAsphaltTexture(seed = 0xRU8): THREE.CanvasTexture {
+export function makeRubberedAsphaltTexture(seed = 0x51ED): THREE.CanvasTexture {
   const [canvas, ctx] = makeCanvas(256);
   const rand = seededRandom(77);
   ctx.fillStyle = '#1b1e22';
