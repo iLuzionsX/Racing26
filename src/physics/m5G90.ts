@@ -54,7 +54,14 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
 
   tireGripFront: 1.21,
   tireGripRear: 1.20,
-  tireStiffness: 15.0,
+  // Heavy-G90 pure-curve progression: soften initial BCD ~13% without touching
+  // peak mu. Keeps longitudinal peak ~0.14-0.15 and lateral peak ~0.15-0.17 rad
+  // inside existing realistic windows while giving a more communicative top.
+  tireStiffness: 13.2,
+  longitudinalShapeC: 1.62,
+  lateralShapeC: 1.58,
+  longitudinalCurvatureE: 0.50,
+  lateralCurvatureE: 0.35,
   tireLoadSensitivity: 0.000030,
   slideFrictionMultiplier: 0.83,
   // The G90's heavy chassis should not see peak lateral tire force in the same

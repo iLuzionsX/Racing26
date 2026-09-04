@@ -113,6 +113,23 @@ assert(
   Math.abs(deepSlide.fx) < Math.abs(longitudinalPeak.output.fx),
   'deep wheelspin/lock must settle below peak longitudinal grip'
 );
+// M5 G90 heavy-car shape regression: same physics, M5 BCD/shape only.
+// Mirrored cases are +/-slipAngle and +/-slipRatio; left/right camber
+// cancellation is covered by the antisymmetry checks above.
+const m5Shape = new TireModel({ ...config, stiffnessB: 13.2, longitudinalShapeC: 1.62, lateralShapeC: 1.58, longitudinalCurvatureE: 0.50, lateralCurvatureE: 0.35, referenceLoadN: 5800 });
+const m5At = (r: number, a: number, fz = 5800) => m5Shape.calculate({ slipRatio: r, slipAngle: a, verticalLoad: fz, camberDeg: 0, surfaceFriction: 1, isLeft: true });
+const m5Long = Array.from({ length: 121 }, (_, i) => i * 0.0025).map((r) => ({ r, f: Math.abs(m5At(r, 0).fx) }));
+const m5LongPeak = m5Long.reduce((p, s) => (s.f > p.f ? s : p));
+const m5Lat = Array.from({ length: 121 }, (_, i) => i * 0.002).map((a) => ({ a, f: Math.abs(m5At(0, a).fy) }));
+const m5LatPeak = m5Lat.reduce((p, s) => (s.f > p.f ? s : p));
+assert(m5LongPeak.r > 0.08 && m5LongPeak.r < 0.16, `M5 longitudinal peak must stay realistic: ${m5LongPeak.r}`);
+assert(m5LatPeak.a > 0.08 && m5LatPeak.a < 0.18, `M5 lateral peak must stay realistic: ${m5LatPeak.a}`);
+const m5Stiffness = (Math.abs(m5At(0, 0.01).fy) / 0.01) / 5800;
+assert(m5Stiffness > 12 && m5Stiffness < 19, `M5 normalized cornering stiffness must not feel like rock: ${m5Stiffness}`);
+const m5Ret2x = Math.abs(m5At(0, m5LatPeak.a * 2).fy) / Math.max(1, m5LatPeak.f);
+assert(m5Ret2x > 0.70 && m5Ret2x < 0.95, `M5 must have progressive falloff at 2x peak, not a cliff or flat top: ${m5Ret2x}`);
+assert(Math.abs(m5At(0.10, 0).fx + m5At(-0.10, 0).fx) < 1e-6, 'M5 longitudinal must stay antisymmetric');
+assert(Math.abs(m5At(0, 0.10).fy + m5At(0, -0.10).fy) < 1e-6, 'M5 lateral must stay antisymmetric');
 
 console.log(JSON.stringify({
   pureLongitudinal: {

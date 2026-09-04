@@ -91,6 +91,10 @@ export class Vehicle {
       camberStiffness: 85,
       optimalTemp: this.config.optimalTireTemp,
       basePressurePsi: this.config.tireBasePressure,
+      longitudinalShapeC: (this.config as any).longitudinalShapeC,
+      lateralShapeC: (this.config as any).lateralShapeC,
+      longitudinalCurvatureE: (this.config as any).longitudinalCurvatureE,
+      lateralCurvatureE: (this.config as any).lateralCurvatureE,
     };
 
     const tireConfigRear = {
@@ -105,6 +109,10 @@ export class Vehicle {
       camberStiffness: 85,
       optimalTemp: this.config.optimalTireTemp,
       basePressurePsi: this.config.tireBasePressure,
+      longitudinalShapeC: (this.config as any).longitudinalShapeC,
+      lateralShapeC: (this.config as any).lateralShapeC,
+      longitudinalCurvatureE: (this.config as any).longitudinalCurvatureE,
+      lateralCurvatureE: (this.config as any).lateralCurvatureE,
     };
 
     this.wheels = [
@@ -294,6 +302,10 @@ export class Vehicle {
         camberStiffness: 85,
         optimalTemp: newConfig.optimalTireTemp,
         basePressurePsi: newConfig.tireBasePressure,
+        longitudinalShapeC: (newConfig as any).longitudinalShapeC,
+        lateralShapeC: (newConfig as any).lateralShapeC,
+        longitudinalCurvatureE: (newConfig as any).longitudinalCurvatureE,
+        lateralCurvatureE: (newConfig as any).lateralCurvatureE,
       };
     }
   }
