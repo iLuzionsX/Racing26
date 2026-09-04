@@ -329,17 +329,17 @@ export default function App() {
       let steerInput: number;
 
       if (steeringInputModeRef.current === 'mouse' && !touchSteeringActive && !inputBlocked) {
-        // Mouse/wheel-style analog input represents a fraction of the physical
-        // steering rack. BMW's speed sensitivity changes assistance/ratio, not
-        // the mechanical lock, so bypass the keyboard-only road-speed angle cap.
-        physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction = 0;
+        // Mouse/wheel-style analog input drives the physical rack directly as a
+        // fraction of mechanical lock. The rack retains full travel at all road
+        // speeds; tire saturation determines whether extra lock makes more force.
         digitalSteerInputRef.current = 0;
         steerInput = mouseSteerInputRef.current;
       } else {
-        // Restore the configured speed-shaped rack behavior for binary keyboard
-        // and touch control, where a held button otherwise means instant full lock.
-        physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction =
-          physicsEngine.config.steerSpeedReduction;
+        // Binary keyboard/touch input is shaped in DigitalSteeringInput as human
+        // hand-wheel + variable-ratio rate emulation (slow wind-on at speed,
+        // fast release/reversal). The rack itself is never shortened by speed;
+        // only the digital driver request is slewed. Do not reintroduce a
+        // speed-dependent rack stop here.
         const steerDirection: -1 | 0 | 1 = isLeft === isRight ? 0 : isLeft ? 1 : -1;
         digitalSteerInputRef.current = updateDigitalSteeringInput(
           digitalSteerInputRef.current,

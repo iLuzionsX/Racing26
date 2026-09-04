@@ -1,30 +1,47 @@
 import { PhysicsMath } from './math/PhysicsMath';
 
 /**
- * Keyboard/touch inputs are binary, so they still need a steering-rate adapter.
- * They must NOT lose steering authority, though: the physical rack in DriverAids
- * already applies its own road-speed steering geometry/rate. A second amplitude
- * cap here used to make high-speed countersteer physically unreachable.
+ * Binary keyboard/touch steering as human hand-wheel emulation.
  *
- * Full left/right therefore always means a full driver request (+/-1). This helper
- * only slews that request so a key/button cannot teleport from lock to lock.
+ * The physical rack in DriverAids retains full mechanical travel at all road
+ * speeds for every input device (including mouse/wheel analog). This helper
+ * only shapes how fast a binary key/button can move the driver hand-wheel
+ * request toward full lock, emulating roughly constant human hand speed passed
+ * through speed-sensitive variable-ratio assistance: road-wheel rate falls with
+ * road speed while sustained full hand-wheel (+/-1) remains reachable.
+ *
+ * This function inspects only input history, road speed magnitude, and dt.
+ * It never inspects yaw, sideslip, tire state, or vehicle motion and never
+ * adds forces. Left/right behavior is exactly symmetric by construction.
+ * Release and reversal (countersteer/correction) stay fast so oversteer
+ * recovery authority is preserved; only wind-on (increasing lock from center
+ * or same-sign) is slowed at speed to keep front slip near peak on turn-in.
  */
+export function digitalWindOnRatePerSecond(speedMs: number): number {
+  const absSpeed = Number.isFinite(speedMs) ? Math.abs(speedMs) : 0;
+  const speedScale = Math.pow(absSpeed / 12, 1.2);
+  // 4.8/s at rest matches prior parking behavior; >=1.0/s guarantees a held
+  // key still reaches full driver request within 1 s even at autobahn speed.
+  return Math.max(1.0, 4.8 / (1 + speedScale));
+}
+
 export function updateDigitalSteeringInput(
   currentInput: number,
   direction: -1 | 0 | 1,
-  _speedMs: number,
+  speedMs: number,
   dt: number
 ): number {
   if (dt <= 0) return PhysicsMath.clamp(currentInput, -1, 1);
 
   const target = direction;
 
-  // A driver can throw the wheel back through center faster than they normally
-  // wind steering into a corner. This is input-device emulation only: it does not
-  // inspect yaw, sideslip, tire state, or vehicle motion and never adds forces.
+  // Fast return and fast reversal: driver can throw the wheel back through
+  // center faster than they normally wind into a corner.
   const reversingDirection =
     direction !== 0 && Math.sign(currentInput) !== 0 && Math.sign(target) !== Math.sign(currentInput);
-  const ratePerSecond = direction === 0 ? 7.0 : reversingDirection ? 7.0 : 4.8;
+  const releasing = direction === 0;
+  const ratePerSecond =
+    releasing || reversingDirection ? 7.0 : digitalWindOnRatePerSecond(speedMs);
   const maxStep = ratePerSecond * dt;
   const error = target - currentInput;
 
