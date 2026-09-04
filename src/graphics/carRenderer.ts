@@ -548,8 +548,23 @@ export class CarRenderer {
       if (fvGroup) {
         fvGroup.visible = !!state.showForceVectors3D;
         if (state.showForceVectors3D) {
-          // Position vector group at wheel local coordinate on the ground
-          fvGroup.position.set(wheel.localPos.x, 0.01, wheel.localPos.z);
+          // Anchor vectors to the same interpolated contact used by physics/skids,
+          // transformed to root-local with the same inverse-yaw as wheel meshes.
+          // Static localPos plus stepped root Y made arrows jitter/float relative
+          // to smoothed wheels on banking/elevation.
+          const contact = (wheel as any).groundContactPos as { x: number; y: number; z: number } | undefined;
+          if (contact && Number.isFinite(contact.x) && Number.isFinite(contact.y) && Number.isFinite(contact.z)) {
+            const dx = contact.x - state.x;
+            const dz = contact.z - state.z;
+            const c = Math.cos(state.yaw);
+            const s = Math.sin(state.yaw);
+            const lx = c * dx - s * dz;
+            const lz = s * dx + c * dz;
+            const ly = contact.y - (state as any).elevationHeight + 0.01;
+            fvGroup.position.set(lx, Number.isFinite(ly) ? ly : 0.01, lz);
+          } else {
+            fvGroup.position.set(wheel.localPos.x, 0.01, wheel.localPos.z);
+          }
 
           // Longitudinal Force Arrow (Fx)
           const fx = Number.isFinite(wheel.forceVectorLong) ? wheel.forceVectorLong : 0;
