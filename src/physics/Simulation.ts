@@ -153,6 +153,10 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // Showcase track root is placed from elevationHeight (see CarRenderer.update).
+      // Leaving it uninterpolated reintroduces 120 Hz vertical steps on graded track
+      // even when heave and hub positions are smoothed. Visual-only; physics steps untouched.
+      elevationHeight: lerp(prev.elevationHeight, curr.elevationHeight, alpha),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
