@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict';
 import {
   MOBILE_STEERING_ROTATION_STORAGE_KEY,
+  MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION,
   MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
   MOBILE_STEERING_WHEEL_MAX_DEG,
   MOBILE_STEERING_WHEEL_MAX_ROTATION_DEG,
   MOBILE_STEERING_WHEEL_MIN_ROTATION_DEG,
+  advanceMobileWheelPointerMotion,
   advanceMobileWheelRotationDeg,
   clampMobileWheelRotationDeg,
+  isMobileWheelPointerNearCenter,
   loadMobileSteeringRotationDeg,
   mapMobileSteeringDirection,
   mobileWheelGrabOffsetDeg,
   mobileWheelMaxRotationDeg,
   mobileWheelPointerAngleDeg,
+  mobileWheelPointerRadiusPx,
   mobileWheelRotationToSteer,
   mobileWheelSteerToRotationDeg,
   resolveMobileWheelRotationDeg,
@@ -41,6 +45,10 @@ assert.notEqual(mapMobileSteeringDirection('left'), mapMobileSteeringDirection('
 assert.equal(mobileWheelPointerAngleDeg(0, 0, 0, -10), 0);
 assert.equal(mobileWheelPointerAngleDeg(0, 0, 10, 0), 90);
 assert.equal(mobileWheelPointerAngleDeg(0, 0, -10, 0), -90);
+assert.equal(mobileWheelPointerRadiusPx(0, 0, 3, 4), 5);
+assert.equal(MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION, 0.22);
+assert.equal(isMobileWheelPointerNearCenter(4, 100), true);
+assert.equal(isMobileWheelPointerNearCenter(30, 100), false);
 assert.equal(wrapAngleDeg(190), -170);
 assert.equal(wrapAngleDeg(-190), 170);
 assert.equal(wrapAngleDeg(360), 0);
@@ -94,6 +102,26 @@ assert.equal(
   MOBILE_STEERING_WHEEL_MAX_DEG,
   'Incremental wheel motion must clamp at full lock without wrapping.'
 );
+
+let pointerMotion = {
+  rotationDeg: 40,
+  lastPointerAngleDeg: 10,
+  needsAngleResync: false,
+};
+pointerMotion = advanceMobileWheelPointerMotion(pointerMotion, 180, true);
+assert.deepEqual(
+  pointerMotion,
+  { rotationDeg: 40, lastPointerAngleDeg: 10, needsAngleResync: true },
+  'Crossing the wheel hub must hold rim rotation instead of trusting an unstable angle.'
+);
+pointerMotion = advanceMobileWheelPointerMotion(pointerMotion, 12, false);
+assert.deepEqual(
+  pointerMotion,
+  { rotationDeg: 40, lastPointerAngleDeg: 12, needsAngleResync: false },
+  'The first valid sample after the hub must only resync the angular reference.'
+);
+pointerMotion = advanceMobileWheelPointerMotion(pointerMotion, 14, false);
+assert.equal(pointerMotion.rotationDeg, 42, 'Normal rim motion must resume after hub resync.');
 
 assert.equal(mobileControlOrientationForViewport(844, 390), 'landscape');
 assert.equal(mobileControlOrientationForViewport(390, 844), 'portrait');
