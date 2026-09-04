@@ -1,4 +1,4 @@
-name: Deploy mobile wheel preview
+name: Deploy combined Racing26 previews
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-mobile-wheel-preview
+  group: pages-combined-previews
   cancel-in-progress: true
 
 jobs:
@@ -19,49 +19,63 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Checkout main
+      - name: Checkout production
         uses: actions/checkout@v4
         with:
           ref: main
           path: main-src
 
-      - name: Checkout preview
+      - name: Checkout PR 51
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
-          path: preview-src
+          ref: handling-digital-driver-v2-integration
+          path: pr51-src
+
+      - name: Checkout PR 57
+        uses: actions/checkout@v4
+        with:
+          ref: feature/mobile-analog-steering-wheel-final
+          path: pr57-src
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Build main site
+      - name: Build production
         working-directory: main-src
         run: |
           npm install --no-package-lock --no-audit --no-fund
           npm run build -- --base=/Racing26/
 
-      - name: Build wheel preview
-        working-directory: preview-src
+      - name: Build PR 51
+        working-directory: pr51-src
         run: |
           npm install --no-package-lock --no-audit --no-fund
-          npm run build -- --base=/Racing26/mobile-wheel-preview/
+          npm run build -- --base=/Racing26/pr-51/
+
+      - name: Build PR 57
+        working-directory: pr57-src
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          npm run build -- --base=/Racing26/pr-57/
 
       - name: Assemble Pages artifact
         run: |
-          mkdir -p site/mobile-wheel-preview
+          rm -rf site
+          mkdir -p site/pr-51 site/pr-57
           cp -R main-src/dist/. site/
-          cp -R preview-src/dist/. site/mobile-wheel-preview/
+          cp -R pr51-src/dist/. site/pr-51/
+          cp -R pr57-src/dist/. site/pr-57/
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./site
 
-      - name: Deploy preview
+      - name: Deploy combined previews
         id: deployment
         uses: actions/deploy-pages@v4
