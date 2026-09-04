@@ -9,15 +9,18 @@ import {
   mobileWheelPointerRadiusPx,
   mobileWheelRotationToSteer,
 } from './mobileControls';
+import { frontTireSaturationState } from './tireSaturationCue';
 
 export const MobileSteeringWheel: React.FC<{
   onSteerChange: (value: number, active: boolean) => void;
   interactionEnabled?: boolean;
   steeringRotationDeg?: number;
+  frontSaturationLevel?: number;
 }> = ({
   onSteerChange,
   interactionEnabled = true,
   steeringRotationDeg = MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
+  frontSaturationLevel = 0,
 }) => {
   const [rotationDeg, setRotationDeg] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
@@ -28,6 +31,7 @@ export const MobileSteeringWheel: React.FC<{
   } | null>(null);
   const rotationRef = React.useRef(0);
   const onSteerChangeRef = React.useRef(onSteerChange);
+  const saturationState = frontTireSaturationState(frontSaturationLevel);
 
   React.useEffect(() => {
     onSteerChangeRef.current = onSteerChange;
@@ -109,6 +113,7 @@ export const MobileSteeringWheel: React.FC<{
     <div
       id="mobile-steering-wheel"
       className={`relative touch-none select-none rounded-full ${dragging ? 'is-dragging' : ''}`}
+      data-saturation={saturationState}
       role="slider"
       tabIndex={interactionEnabled ? 0 : -1}
       aria-disabled={!interactionEnabled}
