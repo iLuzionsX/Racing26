@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
-  advanceMobileWheelRotationDeg,
+  advanceMobileWheelPointerMotion,
   clampMobileWheelRotationDeg,
   isMobileWheelPointerNearCenter,
   mobileWheelMaxRotationDeg,
@@ -142,27 +142,22 @@ export const MobileSteeringWheel: React.FC<{
         event.preventDefault();
         const polar = pointerPolarForEvent(event);
 
-        // Angle is undefined in practice when the thumb crosses near the hub.
-        // Hold the current rim rotation there, then use the first valid sample
-        // outside the hub only to re-establish the angular reference.
-        if (polar.nearCenter) {
-          pointer.needsAngleResync = true;
-          return;
-        }
-        if (pointer.needsAngleResync) {
-          pointer.lastPointerAngleDeg = polar.angleDeg;
-          pointer.needsAngleResync = false;
-          return;
-        }
-
-        const nextRotationDeg = advanceMobileWheelRotationDeg(
-          rotationRef.current,
-          pointer.lastPointerAngleDeg,
+        const nextMotion = advanceMobileWheelPointerMotion(
+          {
+            rotationDeg: rotationRef.current,
+            lastPointerAngleDeg: pointer.lastPointerAngleDeg,
+            needsAngleResync: pointer.needsAngleResync,
+          },
           polar.angleDeg,
+          polar.nearCenter,
           steeringRotationDeg
         );
-        pointer.lastPointerAngleDeg = polar.angleDeg;
-        reportRotation(nextRotationDeg, true);
+
+        pointer.lastPointerAngleDeg = nextMotion.lastPointerAngleDeg;
+        pointer.needsAngleResync = nextMotion.needsAngleResync;
+        if (nextMotion.rotationDeg !== rotationRef.current) {
+          reportRotation(nextMotion.rotationDeg, true);
+        }
       }}
       onPointerLeave={(event) => {
         const pointer = pointerRef.current;
