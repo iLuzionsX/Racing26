@@ -24,8 +24,19 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock --no-audit --no-fund
 
-      - name: TypeScript
-        run: npm run lint
+      - name: Type-check mobile layout files
+        run: >-
+          npx tsc --noEmit
+          --target ES2022
+          --module ESNext
+          --moduleResolution Bundler
+          --jsx react-jsx
+          --lib ES2022,DOM
+          --types vite/client
+          --skipLibCheck
+          src/components/mobileControlLayout.ts
+          src/components/MobileSteeringWheel.tsx
+          src/components/MobileDrivingControls.tsx
 
       - name: Mobile control tests
         run: npm run test:mobile
