@@ -1,1 +1,7 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+Agent 01/35 — digital steering envelope calibration audit.
+
+Start from the current handling-digital-driver-v2 integration, not old main behavior. Audit the new physically grounded keyboard/touch steering envelope across 20–160 km/h. Determine whether targetLateralAccelerationG=0.88, the 6–12 m/s crossover, and the speed-dependent wind-on rate produce natural driver intent on the Showcase Circuit without reintroducing tire saturation.
+
+Use vehicle physics, the measured M5 skidpad capability, wheelbase, actual center steering, tire slip, yaw gain and trajectory radius. Do not add grip, hidden stability forces, yaw torque, or analog steering limits. Preserve full analog rack and emergency recovery authority.
+
+If evidence supports a change, propose the smallest calibration/logic patch and deterministic mirrored tests. Pay special attention to 40–80 km/h where the current envelope may transition too aggressively toward large steering as speed scrubs. Run/constrain recommendations around test:digital-steering, test:keyboard-cornering, test:cornering, test:m5-oversteer, test:m5-validation:strict, test:track, and build.
