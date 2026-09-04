@@ -2,7 +2,7 @@ import React from 'react';
 import { CameraMode } from '../types';
 import { VEHICLE_PRESETS } from '../physics/vehiclePresets';
 import type { SteeringInputMode } from '../physics/MouseSteeringInput';
-import { mapMobileSteeringDirection } from './mobileControls';
+import { MobileSteeringWheel } from './MobileSteeringWheel';
 import {
   Activity,
   Camera,
@@ -34,6 +34,7 @@ interface ControlsOverlayProps {
   onSelectPreset: (key: string) => void;
   activeKeys: { [key: string]: boolean };
   onTouchInput: (action: 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake', active: boolean) => void;
+  onTouchSteer: (value: number, active: boolean) => void;
   isAutomatic: boolean;
   onSetAutomatic: (automatic: boolean) => void;
   steeringInputMode: SteeringInputMode;
@@ -78,6 +79,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   activePresetKey,
   activeKeys,
   onTouchInput,
+  onTouchSteer,
   isAutomatic,
   onSetAutomatic,
   steeringInputMode,
@@ -370,7 +372,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           </div>
           {mobileMode ? (
             <div className="grid grid-cols-2 gap-1.5 font-mono">
-              <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-sky-300">← / →</span><br />Steer</div>
+              <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-sky-300">WHEEL</span><br />Analog steer</div>
               <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-emerald-300">GAS</span><br />Throttle</div>
               <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-rose-300">BRAKE</span><br />Brake</div>
               <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-amber-300">HB</span><br />Handbrake</div>
@@ -409,6 +411,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
       {mobileMode && (
         <MobileDrivingControls
           onTouchInput={onTouchInput}
+          onTouchSteer={onTouchSteer}
           onNextCamera={onNextCamera}
           onReset={onReset}
         />
@@ -425,9 +428,10 @@ const KeyCap: React.FC<{ active: boolean; label: string; activeClass: string }> 
 
 const MobileDrivingControls: React.FC<{
   onTouchInput: (action: TouchAction, active: boolean) => void;
+  onTouchSteer: (value: number, active: boolean) => void;
   onNextCamera: () => void;
   onReset: () => void;
-}> = ({ onTouchInput, onNextCamera, onReset }) => (
+}> = ({ onTouchInput, onTouchSteer, onNextCamera, onReset }) => (
   <>
     <div id="mobile-landscape-hint" className="pointer-events-none absolute left-1/2 top-16 z-30 hidden -translate-x-1/2 rounded-full border border-slate-700/80 bg-slate-950/82 px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300 shadow-xl backdrop-blur-lg">
       Rotate for the best driving view
@@ -444,20 +448,7 @@ const MobileDrivingControls: React.FC<{
     >
       <div id="mobile-steering-pad" className="pointer-events-auto flex flex-col items-start gap-1.5">
         <span className="pl-1 text-[8px] font-black uppercase tracking-[0.2em] text-slate-300/90">Steer</span>
-        <div className="flex gap-2">
-          <MobileTouchButton
-            label="←"
-            ariaLabel="Steer left"
-            className="mobile-steer-button h-[5.25rem] w-[5.25rem] text-3xl active:border-sky-300 active:bg-sky-400 active:text-slate-950"
-            onActiveChange={(active) => onTouchInput(mapMobileSteeringDirection('left'), active)}
-          />
-          <MobileTouchButton
-            label="→"
-            ariaLabel="Steer right"
-            className="mobile-steer-button h-[5.25rem] w-[5.25rem] text-3xl active:border-sky-300 active:bg-sky-400 active:text-slate-950"
-            onActiveChange={(active) => onTouchInput(mapMobileSteeringDirection('right'), active)}
-          />
-        </div>
+        <MobileSteeringWheel onSteerChange={onTouchSteer} />
       </div>
 
       <div id="mobile-quick-actions" className="pointer-events-auto absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-1.5" style={{ marginBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
