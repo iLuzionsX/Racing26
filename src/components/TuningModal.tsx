@@ -33,6 +33,27 @@ export const TuningModal: React.FC<TuningModalProps> = ({
     onSaveConfig(updated);
   };
 
+  const handleDifferentialOverride = (value: DifferentialType) => {
+    const updated = {
+      ...tempConfig,
+      differentialType: value,
+    } as VehicleConfig & Record<string, any>;
+
+    // A single explicit tuning selection means "apply this type to both axles".
+    // Removing per-axle stock overrides keeps the existing selector honest.
+    delete updated.frontDifferentialType;
+    delete updated.rearDifferentialType;
+
+    setTempConfig(updated);
+    onSaveConfig(updated);
+  };
+
+  const splitFrontDifferential = (tempConfig as any).frontDifferentialType as DifferentialType | undefined;
+  const splitRearDifferential = (tempConfig as any).rearDifferentialType as DifferentialType | undefined;
+  const hasSplitDifferential =
+    Boolean(splitFrontDifferential && splitRearDifferential) &&
+    splitFrontDifferential !== splitRearDifferential;
+
   const handleReset = () => {
     setTempConfig(DEFAULT_VEHICLE_CONFIG);
     onSaveConfig(DEFAULT_VEHICLE_CONFIG);
@@ -356,18 +377,31 @@ export const TuningModal: React.FC<TuningModalProps> = ({
 
                 {/* Differential Selector */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-slate-200">Differential Type</label>
+                  <label className="font-semibold text-slate-200">Differential Setup</label>
                   <select
-                    value={tempConfig.differentialType}
-                    onChange={(e) => handleChange('differentialType', e.target.value as DifferentialType)}
+                    value={hasSplitDifferential ? '__SPLIT__' : tempConfig.differentialType}
+                    onChange={(e) => {
+                      if (e.target.value === '__SPLIT__') return;
+                      handleDifferentialOverride(e.target.value as DifferentialType);
+                    }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold cursor-pointer"
                   >
-                    <option value="CLUTCH_1_5">1.5-Way Clutch LSD (Pro Track)</option>
-                    <option value="CLUTCH_2_WAY">2-Way Clutch LSD (Pro Drift)</option>
-                    <option value="TORQUE_VECTOR">Torque Vectoring AWD (Active Bias)</option>
-                    <option value="OPEN">Open Differential (Standard)</option>
-                    <option value="SPOOL">Spool (100% Welded / Locked)</option>
+                    {hasSplitDifferential && (
+                      <option value="__SPLIT__" disabled>
+                        Stock — {splitFrontDifferential} front / Active rear
+                      </option>
+                    )}
+                    <option value="CLUTCH_1_5">1.5-Way Clutch LSD (both axles)</option>
+                    <option value="CLUTCH_2_WAY">2-Way Clutch LSD (both axles)</option>
+                    <option value="TORQUE_VECTOR">Torque Vectoring / Active Bias (both axles)</option>
+                    <option value="OPEN">Open Differential (both axles)</option>
+                    <option value="SPOOL">Spool / Locked (both axles)</option>
                   </select>
+                  {hasSplitDifferential && (
+                    <div className="text-[9px] leading-relaxed text-slate-500">
+                      G90 stock uses an open front differential with the Active M Differential at the rear. Choosing another type overrides both axles until the preset is reloaded.
+                    </div>
+                  )}
                 </div>
 
                 <SliderControl
