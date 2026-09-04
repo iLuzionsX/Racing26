@@ -105,6 +105,48 @@ assert(
 const chicaneTarget = digitalSteeringTarget(-1, 100 / 3.6, chicaneContext);
 assert(Math.abs(chicaneTarget) <= limit100 + 1e-12, 'ordinary chicane target must respect the road-speed envelope');
 
+// Recovery onset must be continuous. A phase-lag state just beyond both
+// detection thresholds is plausible during an S-bend; it may add a little
+// opposite-lock confidence but must never jump directly to a fixed half-rack.
+const onsetLeft: DigitalSteeringContext = {
+  ...BASE_CONTEXT,
+  forwardSpeedMs: 100 / 3.6,
+  yawRateRadS: 0.30,
+  sideslipRad: -4.5 * Math.PI / 180,
+};
+const onsetRight: DigitalSteeringContext = {
+  ...BASE_CONTEXT,
+  forwardSpeedMs: 100 / 3.6,
+  yawRateRadS: -0.30,
+  sideslipRad: 4.5 * Math.PI / 180,
+};
+const onsetBlendLeft = digitalCountersteerRecoveryBlend(-1, 100 / 3.6, onsetLeft);
+const onsetBlendRight = digitalCountersteerRecoveryBlend(1, 100 / 3.6, onsetRight);
+const onsetTargetLeft = digitalSteeringTarget(-1, 100 / 3.6, onsetLeft);
+const onsetTargetRight = digitalSteeringTarget(1, 100 / 3.6, onsetRight);
+assert(onsetBlendLeft > 0 && onsetBlendLeft < 0.10, `threshold-onset recovery confidence should stay small, got ${onsetBlendLeft}`);
+assert(Math.abs(onsetBlendLeft - onsetBlendRight) < 1e-12, 'threshold-onset blend must mirror exactly');
+assert(
+  Math.abs(onsetTargetLeft) - limit100 < 0.10,
+  `threshold-onset target must remain near the road-speed envelope, got ${Math.abs(onsetTargetLeft)} vs ${limit100}`
+);
+assert(Math.abs(onsetTargetLeft + onsetTargetRight) < 1e-12, 'threshold-onset target must mirror exactly');
+
+// The slew path must be continuous too: a tiny recovery confidence cannot switch
+// a normal reversal instantly onto the full 8.5/s emergency slew.
+const reversalStart = limit100;
+const onsetStep = updateDigitalSteeringInput(
+  reversalStart,
+  -1,
+  100 / 3.6,
+  DT,
+  onsetLeft
+);
+assert(
+  Math.abs(onsetStep - reversalStart) <= 7.2 * DT,
+  `threshold-onset reversal slew jumped too far in one frame: ${onsetStep - reversalStart}`
+);
+
 // Genuine left-oversteer: car is yawing left (+yaw), velocity is slipping right
 // relative to the body (negative beta), and the driver requests right countersteer.
 const recoveryContext: DigitalSteeringContext = {
