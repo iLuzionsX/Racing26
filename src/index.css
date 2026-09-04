@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* Driving surface: dragging should control the car, never select or drag UI. */
+#driving-simulator-app,
+#driving-simulator-app * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#driving-simulator-app {
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+
+#driving-simulator-app input,
+#driving-simulator-app textarea,
+#driving-simulator-app [contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#driving-simulator-app img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#driving-simulator-app canvas,
+#mobile-driving-controls,
+#mobile-steering-wheel {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
 html[data-driving-mobile='true'],
 html[data-driving-mobile='true'] body,
 html[data-driving-mobile='true'] #root,
@@ -83,8 +117,47 @@ html[data-driving-mobile='true'] #mobile-pedal-pad {
   filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.28));
 }
 
-html[data-driving-mobile='true'] .mobile-steer-button {
+html[data-driving-mobile='true'] #mobile-steering-wheel {
+  width: clamp(7rem, 24vw, 9rem);
+  height: clamp(7rem, 24vw, 9rem);
+  padding: 0.42rem;
+  border: 1px solid rgb(226 232 240 / 0.28);
+  background: rgb(2 6 23 / 0.34);
+  box-shadow:
+    0 14px 32px rgb(0 0 0 / 0.34),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+  backdrop-filter: blur(6px);
+  -webkit-touch-callout: none;
+}
+
+html[data-driving-mobile='true'] .mobile-steering-wheel-rotor {
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  filter: drop-shadow(0 7px 13px rgb(0 0 0 / 0.4));
+}
+
+html[data-driving-mobile='true'] #mobile-steering-wheel.is-dragging .mobile-steering-wheel-rotor {
+  transition: none;
+}
+
+html[data-driving-mobile='true'] .mobile-steering-wheel-center-mark {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 0.36rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  transform: translateX(-50%);
   border-radius: 9999px;
+  background: rgb(56 189 248 / 0.92);
+  box-shadow: 0 0 10px rgb(56 189 248 / 0.6);
+}
+
+html[data-driving-mobile='true'] #mobile-steering-wheel:focus-visible {
+  outline: 2px solid rgb(125 211 252 / 0.95);
+  outline-offset: 3px;
 }
 
 html[data-driving-mobile='true'] .mobile-throttle,
@@ -105,6 +178,11 @@ html[data-driving-mobile='true'] #mobile-quick-actions {
     display: none;
   }
 
+  html[data-driving-mobile='true'] #mobile-steering-wheel {
+    width: clamp(6.25rem, 24vh, 7.75rem);
+    height: clamp(6.25rem, 24vh, 7.75rem);
+  }
+
   html[data-driving-mobile='true'] #mobile-quick-actions {
     margin-bottom: max(0.55rem, env(safe-area-inset-bottom)) !important;
   }
@@ -119,9 +197,10 @@ html[data-driving-mobile='true'] #mobile-quick-actions {
     top: max(3.7rem, calc(env(safe-area-inset-top) + 3rem));
   }
 
-  html[data-driving-mobile='true'] .mobile-steer-button {
-    width: 4.15rem !important;
-    height: 4.15rem !important;
+  html[data-driving-mobile='true'] #mobile-steering-wheel {
+    width: 7.15rem;
+    height: 7.15rem;
+    padding: 0.36rem;
   }
 
   html[data-driving-mobile='true'] .mobile-handbrake {
