@@ -314,6 +314,60 @@ export function runShowcaseCircuitQA(): Result[] {
     });
   }
 
+  // 7b) Physics surface lookup must be continuous between the discrete path samples.
+  // A nearest-sample implementation creates a longitudinal staircase even when the
+  // rendered ribbon and source curve are smooth, which excites the unsprung masses.
+  {
+    const provider = new ShowcaseCircuitSurfaceProvider(path);
+    const probeCount = PATH_SAMPLES * 4;
+    let maxProjectionErrorM = 0;
+    let maxElevationErrorM = 0;
+    let minimumNormalDot = 1;
+
+    for (let i = 0; i < probeCount; i++) {
+      // Avoid probing only exact sample boundaries; quarter-sample offsets catch
+      // the old snapping behavior deterministically.
+      const u = (i + 0.37) / probeCount;
+      const expected = path.sampleAt(u);
+      const hit = path.closest(expected.center.x, expected.center.z);
+      const surface = provider.sampleSurface(expected.center.x, expected.center.z);
+
+      maxProjectionErrorM = Math.max(
+        maxProjectionErrorM,
+        Math.hypot(
+          hit.sample.center.x - expected.center.x,
+          hit.sample.center.z - expected.center.z,
+        ),
+      );
+      maxElevationErrorM = Math.max(
+        maxElevationErrorM,
+        Math.abs(surface.elevation - expected.center.y),
+      );
+      minimumNormalDot = Math.min(
+        minimumNormalDot,
+        expected.normal.x * surface.normal.x +
+          expected.normal.y * surface.normal.y +
+          expected.normal.z * surface.normal.z,
+      );
+    }
+
+    const fail =
+      maxProjectionErrorM > 0.02 ||
+      maxElevationErrorM > 0.005 ||
+      minimumNormalDot < 0.999;
+    record({
+      id: 'continuous-physics-surface-projection',
+      status: fail ? 'FAIL' : 'PASS',
+      summary:
+        `maxXZError=${(maxProjectionErrorM * 1000).toFixed(1)}mm ` +
+        `maxYError=${(maxElevationErrorM * 1000).toFixed(1)}mm minNormalDot=${minimumNormalDot.toFixed(6)}`,
+      details: [
+        `probes=${probeCount}`,
+        'guards against fixed-sample staircase excitation of wheel/hub dynamics',
+      ],
+    });
+  }
+
   // 8) Spawn center + M5-sized wheel offsets must all land on the same road deck.
   {
     const spawn = path.spawn();
