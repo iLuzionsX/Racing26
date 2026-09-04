@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { BARRIER_OFFSET_M, type ShowcaseTrackPath } from '../showcaseCircuit';
+import type { ShowcaseTrackPath } from '../showcaseCircuit';
 
 // Venue practicals + emissive timing + side-cast shadow moments.
-// INVARIANT: nothing is placed inside BARRIER_OFFSET_M; 18m runoff stays clear.
+// INVARIANT: nothing is placed inside barrierOffsetM; 18m runoff stays clear.
 // No shadow-casting point/spot lights. Only emissive + 2 non-shadow fills.
 function timingTexture(lines: string[]): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -16,7 +16,7 @@ function timingTexture(lines: string[]): THREE.CanvasTexture {
   return tex;
 }
 
-export function createShowcaseVenue(path: ShowcaseTrackPath): THREE.Group {
+export function createShowcasePracticalLighting(path: ShowcaseTrackPath, barrierOffsetM = 31.75): THREE.Group {
   const group = new THREE.Group();
   group.name = 'showcase-venue-lighting';
   const warm = new THREE.MeshStandardMaterial({ color: 0x201a12, emissive: 0xffc98a, emissiveIntensity: 1.6, roughness: 0.6 });
@@ -25,7 +25,7 @@ export function createShowcaseVenue(path: ShowcaseTrackPath): THREE.Group {
   const pit = path.sampleAt(0.025);
   for (let i = -3; i <= 3; i++) {
     const box = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.3), i % 2 ? warm : cool);
-    box.position.copy(pit.center).addScaledVector(pit.bankedLateral, -(BARRIER_OFFSET_M + 9)).addScaledVector(pit.normal, 3.2);
+    box.position.copy(pit.center).addScaledVector(pit.bankedLateral, -(barrierOffsetM + 9)).addScaledVector(pit.normal, 3.2);
     box.position.addScaledVector(pit.tangent, i * 18);
     box.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(pit.bankedLateral, pit.normal, pit.tangent));
     group.add(box);
@@ -33,7 +33,7 @@ export function createShowcaseVenue(path: ShowcaseTrackPath): THREE.Group {
   // Two non-shadow fill lights only (pit + start gantry), low intensity for daylight.
   const pitFill = new THREE.PointLight(0xffd9a0, 18, 55, 1.8);
   pitFill.castShadow = false;
-  pitFill.position.copy(pit.center).addScaledVector(pit.bankedLateral, -(BARRIER_OFFSET_M + 10)).addScaledVector(pit.normal, 6);
+  pitFill.position.copy(pit.center).addScaledVector(pit.bankedLateral, -(barrierOffsetM + 10)).addScaledVector(pit.normal, 6);
   group.add(pitFill);
   const start = path.sampleAt(0.018);
   const gantryFill = new THREE.PointLight(0x9fd8ff, 12, 45, 1.8);
@@ -50,7 +50,7 @@ export function createShowcaseVenue(path: ShowcaseTrackPath): THREE.Group {
     const s = path.sampleAt(u);
     const mat = new THREE.MeshBasicMaterial({ map: timingTexture(lines) });
     const board = new THREE.Mesh(new THREE.PlaneGeometry(7, 3.5), mat);
-    board.position.copy(s.center).addScaledVector(s.lateral, BARRIER_OFFSET_M + 6);
+    board.position.copy(s.center).addScaledVector(s.lateral, barrierOffsetM + 6);
     board.position.y += 4.5;
     board.rotation.y = Math.atan2(s.tangent.x, s.tangent.z) - Math.PI / 2;
     group.add(board);
@@ -63,7 +63,7 @@ export function createShowcaseVenue(path: ShowcaseTrackPath): THREE.Group {
     const s = path.sampleAt(u);
     for (const side of [-1, 1]) {
       const pylon = new THREE.Mesh(pylonGeo, pylonMat);
-      pylon.position.copy(s.center).addScaledVector(s.lateral, side * (BARRIER_OFFSET_M + 9));
+      pylon.position.copy(s.center).addScaledVector(s.lateral, side * (barrierOffsetM + 9));
       pylon.position.y += 10;
       pylon.castShadow = true;
       pylon.receiveShadow = false;
@@ -72,3 +72,5 @@ export function createShowcaseVenue(path: ShowcaseTrackPath): THREE.Group {
   }
   return group;
 }
+
+export const createShowcaseVenue = createShowcasePracticalLighting;
