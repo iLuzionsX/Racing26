@@ -131,14 +131,13 @@ export function digitalSteeringTarget(
 
   if (recoveryBlend <= 0) return direction * normalLimit;
 
-  // Once we have positively identified a slide, immediately restore meaningful
-  // opposite-lock authority, then scale continuously toward full mechanical lock
-  // with slide severity. This is input emulation only; no force or yaw torque is
-  // added and the tire model still decides what the car can physically do.
-  const recoveryAuthority = Math.max(
-    normalLimit,
-    PhysicsMath.lerp(0.45, 1.0, recoveryBlend)
-  );
+  // Confidence-proportional opposite-lock authority. Starting from the normal
+  // road-speed limit keeps the blend continuous at the detection boundary so a
+  // low-confidence chicane or lift-off transient cannot bypass the envelope
+  // with a step to 0.45. Severe slides still approach full mechanical lock.
+  // This is input emulation only; no force or yaw torque is added and the tire
+  // model still decides what the car can physically do.
+  const recoveryAuthority = PhysicsMath.lerp(normalLimit, 1.0, recoveryBlend);
   return direction * recoveryAuthority;
 }
 
