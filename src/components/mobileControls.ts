@@ -116,6 +116,35 @@ export function mobileWheelPointerAngleDeg(
 }
 
 /**
+ * Center dead-radius guard: pointer angle is ill-conditioned at r~0.
+ * Tapping within this fraction of the wheel radius must not advance the rim.
+ * Pure UI/input math; no tire, rack, grip or speed-cap change.
+ */
+export const MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION = 0.24;
+
+export function mobileWheelPointerRadiusPx(
+  centerX: number,
+  centerY: number,
+  clientX: number,
+  clientY: number
+): number {
+  if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return 0;
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return 0;
+  return Math.hypot(clientX - centerX, clientY - centerY);
+}
+
+export function isMobileWheelPointerNearCenter(
+  radiusPx: number,
+  wheelRadiusPx: number,
+  fraction = MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION
+): boolean {
+  if (!Number.isFinite(radiusPx) || !Number.isFinite(wheelRadiusPx)) return true;
+  if (!(wheelRadiusPx > 0)) return true;
+  const f = Number.isFinite(fraction) ? Math.max(0, Math.min(0.5, fraction)) : MOBILE_STEERING_WHEEL_CENTER_DEAD_FRACTION;
+  return radiusPx < Math.max(1, wheelRadiusPx * f);
+}
+
+/**
  * Preserve the point on the rim where the driver grabbed the wheel so the
  * visual/input angle does not jump on pointer-down.
  */
