@@ -34,6 +34,17 @@ const config = {
   absMode: 'OFF',
 } as VehicleConfig;
 
+assert.equal(
+  (config as any).frontDifferentialType,
+  'OPEN',
+  'G90 production calibration must keep the front differential open'
+);
+assert.equal(
+  (config as any).rearDifferentialType,
+  'TORQUE_VECTOR',
+  'G90 production calibration must keep the Active M Differential on the rear axle'
+);
+
 function makeRollingM5(frontType: DifferentialType) {
   const sim = new Simulation(config, new ProvingGroundSurfaceProvider());
   sim.reset(0, 0, 0);
@@ -187,18 +198,18 @@ function runCase(frontType: DifferentialType, direction: 1 | -1) {
   return result;
 }
 
-const currentLeft = runCase('TORQUE_VECTOR', 1);
-const openLeft = runCase('OPEN', 1);
-const currentRight = runCase('TORQUE_VECTOR', -1);
-const openRight = runCase('OPEN', -1);
+const legacyLockedLeft = runCase('TORQUE_VECTOR', 1);
+const productionOpenLeft = runCase('OPEN', 1);
+const legacyLockedRight = runCase('TORQUE_VECTOR', -1);
+const productionOpenRight = runCase('OPEN', -1);
 
 function mirrorError(a: number, b: number): number {
   return Math.abs(Math.abs(a) - Math.abs(b)) / Math.max(0.25, (Math.abs(a) + Math.abs(b)) * 0.5);
 }
 
 for (const [label, left, right] of [
-  ['current', currentLeft, currentRight],
-  ['open-front', openLeft, openRight],
+  ['legacy-front-lock', legacyLockedLeft, legacyLockedRight],
+  ['production-open-front', productionOpenLeft, productionOpenRight],
 ] as const) {
   assert(mirrorError(left.tail.frontSlipDeg, right.tail.frontSlipDeg) < 0.08,
     `${label}: front-slip left/right mirror drifted`);
@@ -209,14 +220,33 @@ for (const [label, left, right] of [
 }
 
 const delta = {
-  tailFrontSlipDeg: currentLeft.tail.frontSlipDeg - openLeft.tail.frontSlipDeg,
-  peakFrontSlipDeg: currentLeft.peakFrontSlipDeg - openLeft.peakFrontSlipDeg,
-  tailInsideFrontKappa: currentLeft.tail.insideFrontKappa - openLeft.tail.insideFrontKappa,
-  tailOutsideFrontKappa: currentLeft.tail.outsideFrontKappa - openLeft.tail.outsideFrontKappa,
-  tailYawDegS: Math.abs(currentLeft.tail.yawDegS) - Math.abs(openLeft.tail.yawDegS),
-  tailLatG: currentLeft.tail.latG - openLeft.tail.latG,
-  tailSpeedKmh: currentLeft.tail.speedKmh - openLeft.tail.speedKmh,
+  tailFrontSlipDeg:
+    legacyLockedLeft.tail.frontSlipDeg - productionOpenLeft.tail.frontSlipDeg,
+  peakFrontSlipDeg:
+    legacyLockedLeft.peakFrontSlipDeg - productionOpenLeft.peakFrontSlipDeg,
+  tailInsideFrontKappa:
+    legacyLockedLeft.tail.insideFrontKappa - productionOpenLeft.tail.insideFrontKappa,
+  tailOutsideFrontKappa:
+    legacyLockedLeft.tail.outsideFrontKappa - productionOpenLeft.tail.outsideFrontKappa,
+  tailYawDegS:
+    Math.abs(legacyLockedLeft.tail.yawDegS) - Math.abs(productionOpenLeft.tail.yawDegS),
+  tailLatG:
+    legacyLockedLeft.tail.latG - productionOpenLeft.tail.latG,
+  tailSpeedKmh:
+    legacyLockedLeft.tail.speedKmh - productionOpenLeft.tail.speedKmh,
 };
+
+// The production architecture should not lose the measured powered-corner
+// response versus the legacy front-lock approximation. This is an internal
+// regression backed by the measured A/B, not an external G90 performance target.
+assert(
+  productionOpenLeft.tail.latG >= legacyLockedLeft.tail.latG * 0.99,
+  `open front unexpectedly lost powered-corner lateral response: open=${productionOpenLeft.tail.latG.toFixed(3)}g legacy=${legacyLockedLeft.tail.latG.toFixed(3)}g`
+);
+assert(
+  Math.abs(productionOpenLeft.tail.yawDegS) >= Math.abs(legacyLockedLeft.tail.yawDegS) * 0.99,
+  `open front unexpectedly lost powered-corner yaw response`
+);
 
 console.log(JSON.stringify({
   scenario: 'M5 front differential powered-corner A/B',
@@ -224,12 +254,12 @@ console.log(JSON.stringify({
   handAngleDeg: HAND_ANGLE_DEG,
   tcsMode: config.tcsMode,
   rearDifferentialType: config.differentialType,
-  currentLeft,
-  openLeft,
-  currentRight,
-  openRight,
-  deltaCurrentMinusOpen: delta,
-  note: 'Measurement-only diagnostic. No production front-differential override is configured.',
+  legacyLockedLeft,
+  productionOpenLeft,
+  legacyLockedRight,
+  productionOpenRight,
+  deltaLegacyLockedMinusProductionOpen: delta,
+  note: 'Production G90 uses an open front differential and rear TORQUE_VECTOR Active M Differential; the legacy locked-front case is diagnostic only.',
 }, null, 2));
 
 console.log('FrontDifferentialCornerExitTests: PASS');
