@@ -27,12 +27,10 @@ export function createShowcaseAtmosphere(scene: THREE.Scene, trackCenterX = 560)
   sky.renderOrder = -10;
   group.add(sky);
   const hazeMat = new THREE.MeshBasicMaterial({ color: 0xbdd2e2, transparent: true, opacity: 0.10, depthWrite: false, fog: false });
-  for (let i = 0; i < 3; i++) {
-    const haze = new THREE.Mesh(new THREE.PlaneGeometry(700, 60), hazeMat);
-    haze.position.set(trackCenterX + (i - 1) * 220, 26 + i * 9, -320 + i * 180);
-    haze.rotation.y = Math.PI / 8 + i * 0.2;
-    haze.renderOrder = 2;
-    group.add(haze);
-  }
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(760, 72), hazeMat);
+  haze.position.set(trackCenterX, 34, -330);
+  haze.rotation.y = Math.PI / 9;
+  haze.renderOrder = 2;
+  group.add(haze);
   return group;
 }
