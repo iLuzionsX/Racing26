@@ -3,8 +3,10 @@ import {
   MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
   advanceMobileWheelRotationDeg,
   clampMobileWheelRotationDeg,
+  isMobileWheelPointerNearCenter,
   mobileWheelMaxRotationDeg,
   mobileWheelPointerAngleDeg,
+  mobileWheelPointerRadiusPx,
   mobileWheelRotationToSteer,
 } from './mobileControls';
 
@@ -19,7 +21,11 @@ export const MobileSteeringWheel: React.FC<{
 }) => {
   const [rotationDeg, setRotationDeg] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
-  const pointerRef = React.useRef<{ id: number; lastPointerAngleDeg: number } | null>(null);
+  const pointerRef = React.useRef<{
+    id: number;
+    lastPointerAngleDeg: number;
+    needsAngleResync: boolean;
+  } | null>(null);
   const rotationRef = React.useRef(0);
   const onSteerChangeRef = React.useRef(onSteerChange);
 
@@ -77,14 +83,26 @@ export const MobileSteeringWheel: React.FC<{
     };
   }, [release]);
 
-  const pointerAngleForEvent = (event: React.PointerEvent<HTMLDivElement>) => {
+  const pointerPolarForEvent = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    return mobileWheelPointerAngleDeg(
-      rect.left + rect.width / 2,
-      rect.top + rect.height / 2,
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const wheelRadiusPx = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+    const pointerRadiusPx = mobileWheelPointerRadiusPx(
+      centerX,
+      centerY,
       event.clientX,
       event.clientY
     );
+    return {
+      angleDeg: mobileWheelPointerAngleDeg(
+        centerX,
+        centerY,
+        event.clientX,
+        event.clientY
+      ),
+      nearCenter: isMobileWheelPointerNearCenter(pointerRadiusPx, wheelRadiusPx),
+    };
   };
 
   return (
@@ -104,10 +122,11 @@ export const MobileSteeringWheel: React.FC<{
         if (!interactionEnabled) return;
         event.preventDefault();
         if (pointerRef.current !== null) return;
-        const pointerAngleDeg = pointerAngleForEvent(event);
+        const pointer = pointerPolarForEvent(event);
         pointerRef.current = {
           id: event.pointerId,
-          lastPointerAngleDeg: pointerAngleDeg,
+          lastPointerAngleDeg: pointer.angleDeg,
+          needsAngleResync: pointer.nearCenter,
         };
         setDragging(true);
         event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -121,14 +140,28 @@ export const MobileSteeringWheel: React.FC<{
         const pointer = pointerRef.current;
         if (!pointer || pointer.id !== event.pointerId) return;
         event.preventDefault();
-        const pointerAngleDeg = pointerAngleForEvent(event);
+        const polar = pointerPolarForEvent(event);
+
+        // Angle is undefined in practice when the thumb crosses near the hub.
+        // Hold the current rim rotation there, then use the first valid sample
+        // outside the hub only to re-establish the angular reference.
+        if (polar.nearCenter) {
+          pointer.needsAngleResync = true;
+          return;
+        }
+        if (pointer.needsAngleResync) {
+          pointer.lastPointerAngleDeg = polar.angleDeg;
+          pointer.needsAngleResync = false;
+          return;
+        }
+
         const nextRotationDeg = advanceMobileWheelRotationDeg(
           rotationRef.current,
           pointer.lastPointerAngleDeg,
-          pointerAngleDeg,
+          polar.angleDeg,
           steeringRotationDeg
         );
-        pointer.lastPointerAngleDeg = pointerAngleDeg;
+        pointer.lastPointerAngleDeg = polar.angleDeg;
         reportRotation(nextRotationDeg, true);
       }}
       onPointerLeave={(event) => {
