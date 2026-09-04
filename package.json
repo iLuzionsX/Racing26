@@ -26,6 +26,7 @@
     "test:tire": "tsx src/physics/tests/TireModelTests.ts",
     "test:stationary": "tsx src/physics/tests/StationarySteeringTests.ts",
     "test:mobile": "tsx src/physics/tests/MobileControlsTests.ts",
+    "test:tire-feel": "tsx src/physics/tests/TireFeelSteeringSweepTests.ts",
     "test:smoke": "tsx src/physics/tests/TireSmokeRegressionTests.ts",
     "test:crash": "tsx src/physics/tests/CrashStabilityTests.ts",
     "test:crash-recovery": "tsx src/physics/tests/CrashRecoveryTests.ts",
