@@ -315,8 +315,16 @@ export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
     }
 
     if (absLateral <= TRACK_HALF_WIDTH_M + CURB_WIDTH_M) {
-      // 15 mm kerb lip: enough for feedback, not enough to launch the car.
-      return makeSample(roadPoint.y + 0.015, 'kerb', 0.90, 0.024, true);
+      // The visible curb rises progressively from the asphalt. Match that with a
+      // short smooth physics ramp instead of a 15 mm vertical wall at the road edge:
+      // an instantaneous height step injects a high-frequency tire load spike into
+      // the 55 kg unsprung corner and reads as wheel/chassis chatter when clipping
+      // the apex. Keep the full 15 mm feedback once the tire is on the curb.
+      const intoCurbM = absLateral - TRACK_HALF_WIDTH_M;
+      const rampT = THREE.MathUtils.clamp(intoCurbM / 0.25, 0, 1);
+      const smoothRamp = rampT * rampT * (3 - 2 * rampT);
+      const curbLipM = 0.015 * smoothRamp;
+      return makeSample(roadPoint.y + curbLipM, 'kerb', 0.90, 0.024, true);
     }
 
     if (absLateral <= OUTER_RUNOFF_M) {
