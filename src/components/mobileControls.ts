@@ -214,3 +214,37 @@ export function advanceMobileWheelRotationDeg(
   const deltaDeg = wrapAngleDeg(pointerAngleDeg - previousPointerAngleDeg);
   return clampMobileWheelRotationDeg(rotationDeg + deltaDeg, steeringRotationDeg);
 }
+
+export interface MobileWheelPointerMotionState {
+  rotationDeg: number;
+  lastPointerAngleDeg: number;
+  needsAngleResync: boolean;
+}
+
+export function advanceMobileWheelPointerMotion(
+  state: MobileWheelPointerMotionState,
+  pointerAngleDeg: number,
+  pointerNearCenter: boolean,
+  steeringRotationDeg = MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG
+): MobileWheelPointerMotionState {
+  if (pointerNearCenter) {
+    return { ...state, needsAngleResync: true };
+  }
+  if (state.needsAngleResync) {
+    return {
+      rotationDeg: state.rotationDeg,
+      lastPointerAngleDeg: pointerAngleDeg,
+      needsAngleResync: false,
+    };
+  }
+  return {
+    rotationDeg: advanceMobileWheelRotationDeg(
+      state.rotationDeg,
+      state.lastPointerAngleDeg,
+      pointerAngleDeg,
+      steeringRotationDeg
+    ),
+    lastPointerAngleDeg: pointerAngleDeg,
+    needsAngleResync: false,
+  };
+}
