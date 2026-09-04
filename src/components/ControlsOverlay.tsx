@@ -2,7 +2,23 @@ import React from 'react';
 import { CameraMode } from '../types';
 import { VEHICLE_PRESETS } from '../physics/vehiclePresets';
 import type { SteeringInputMode } from '../physics/MouseSteeringInput';
-import { mapMobileSteeringDirection } from './mobileControls';
+import { MobileDrivingControls } from './MobileDrivingControls';
+import {
+  MOBILE_PEDALS_SCALE_MAX,
+  MOBILE_PEDALS_SCALE_MIN,
+  MOBILE_WHEEL_SCALE_MAX,
+  MOBILE_WHEEL_SCALE_MIN,
+  cloneMobileControlLayoutStore,
+  getDefaultMobileControlPair,
+  loadMobileControlLayoutStore,
+  mobileControlOrientationForViewport,
+  sanitizeMobileControlLayoutStore,
+  saveMobileControlLayoutStore,
+  updateMobileControlCluster,
+  type MobileControlClusterId,
+  type MobileControlLayoutPair,
+  type MobileControlOrientation,
+} from './mobileControlLayout';
 import {
   Activity,
   Camera,
@@ -34,6 +50,7 @@ interface ControlsOverlayProps {
   onSelectPreset: (key: string) => void;
   activeKeys: { [key: string]: boolean };
   onTouchInput: (action: 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake', active: boolean) => void;
+  onTouchSteer: (value: number, active: boolean) => void;
   isAutomatic: boolean;
   onSetAutomatic: (automatic: boolean) => void;
   steeringInputMode: SteeringInputMode;
@@ -42,8 +59,6 @@ interface ControlsOverlayProps {
   isM5RwdMode: boolean;
   onSetM5RwdMode?: (enabled: boolean) => void;
 }
-
-type TouchAction = 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake';
 
 const detectMobileDrivingMode = () => {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
@@ -78,6 +93,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   activePresetKey,
   activeKeys,
   onTouchInput,
+  onTouchSteer,
   isAutomatic,
   onSetAutomatic,
   steeringInputMode,
@@ -90,6 +106,16 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   const [showHelp, setShowHelp] = React.useState(false);
   const [mobileMode, setMobileMode] = React.useState(false);
   const [showDrivingSettings, setShowDrivingSettings] = React.useState(false);
+  const [mobileOrientation, setMobileOrientation] = React.useState<MobileControlOrientation>(() =>
+    typeof window === 'undefined'
+      ? 'portrait'
+      : mobileControlOrientationForViewport(window.innerWidth, window.innerHeight)
+  );
+  const [mobileLayout, setMobileLayout] = React.useState(() => loadMobileControlLayoutStore());
+  const [mobileLayoutDraft, setMobileLayoutDraft] = React.useState(() =>
+    cloneMobileControlLayoutStore(loadMobileControlLayoutStore())
+  );
+  const [mobileLayoutEditing, setMobileLayoutEditing] = React.useState(false);
   const activePreset = VEHICLE_PRESETS[activePresetKey] || VEHICLE_PRESETS.sportGT;
 
   const isW = activeKeys['KeyW'] || activeKeys['ArrowUp'];
@@ -100,7 +126,12 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
   React.useEffect(() => {
     const pointerQuery = window.matchMedia('(pointer: coarse)');
-    const evaluate = () => setMobileMode(detectMobileDrivingMode());
+    const evaluate = () => {
+      setMobileMode(detectMobileDrivingMode());
+      setMobileOrientation(
+        mobileControlOrientationForViewport(window.innerWidth, window.innerHeight)
+      );
+    };
 
     evaluate();
     pointerQuery.addEventListener?.('change', evaluate);
@@ -130,11 +161,74 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     onSetAutomatic(!isAutomatic);
   };
 
+  const neutralizeMobileControls = () => {
+    onTouchSteer(0, false);
+    onTouchInput('throttle', false);
+    onTouchInput('brake', false);
+    onTouchInput('steerLeft', false);
+    onTouchInput('steerRight', false);
+    onTouchInput('handbrake', false);
+  };
+
+  const beginMobileLayoutEdit = () => {
+    neutralizeMobileControls();
+    setMobileLayoutDraft(cloneMobileControlLayoutStore(mobileLayout));
+    setMobileLayoutEditing(true);
+    setShowDrivingSettings(true);
+  };
+
+  const saveMobileLayoutEdit = () => {
+    neutralizeMobileControls();
+    const next = sanitizeMobileControlLayoutStore(mobileLayoutDraft);
+    saveMobileControlLayoutStore(next);
+    setMobileLayout(next);
+    setMobileLayoutDraft(cloneMobileControlLayoutStore(next));
+    setMobileLayoutEditing(false);
+  };
+
+  const cancelMobileLayoutEdit = () => {
+    neutralizeMobileControls();
+    setMobileLayoutDraft(cloneMobileControlLayoutStore(mobileLayout));
+    setMobileLayoutEditing(false);
+  };
+
+  const updateMobileLayoutDraftPair = (pair: MobileControlLayoutPair) => {
+    setMobileLayoutDraft((previous) => ({
+      ...previous,
+      [mobileOrientation]: pair,
+    }));
+  };
+
+  const updateMobileClusterScale = (
+    id: MobileControlClusterId,
+    scale: number
+  ) => {
+    setMobileLayoutDraft((previous) => ({
+      ...previous,
+      [mobileOrientation]: updateMobileControlCluster(
+        previous[mobileOrientation],
+        id,
+        { scale }
+      ),
+    }));
+  };
+
+  const resetCurrentMobileLayout = () => {
+    neutralizeMobileControls();
+    setMobileLayoutDraft((previous) => ({
+      ...previous,
+      [mobileOrientation]: getDefaultMobileControlPair(mobileOrientation),
+    }));
+  };
+
+  const activeMobileLayout =
+    (mobileLayoutEditing ? mobileLayoutDraft : mobileLayout)[mobileOrientation];
+
   return (
     <>
       <div
         id="driving-utility-bar"
-        className="absolute left-1/2 top-3 z-20 -translate-x-1/2"
+        className="absolute left-1/2 top-3 z-50 -translate-x-1/2"
         style={mobileMode ? { top: 'max(0.75rem, env(safe-area-inset-top))' } : undefined}
       >
         <div className="flex items-center gap-1 rounded-2xl border border-slate-800/75 bg-slate-950/80 p-1 shadow-2xl backdrop-blur-xl">
@@ -182,7 +276,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
         {showDrivingSettings && (
           <div
             id="driving-settings-panel"
-            className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-700/80 bg-slate-950/94 p-3 text-slate-200 shadow-2xl backdrop-blur-xl"
+            className="absolute right-0 mt-2 max-h-[calc(100vh-5rem)] w-72 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-2xl border border-slate-700/80 bg-slate-950/94 p-3 text-slate-200 shadow-2xl backdrop-blur-xl"
           >
             <div className="mb-2 flex items-center gap-2 border-b border-slate-800 pb-2">
               <Settings2 size={14} className="text-sky-300" />
@@ -214,6 +308,111 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               <span className={isAutomatic ? 'text-emerald-300' : 'text-sky-300'}>{isAutomatic ? 'Automatic' : 'Manual'}</span>
             </div>
             <div className="mt-2 px-1 text-[8px] text-slate-500">Keyboard shortcut: M</div>
+
+            {mobileMode && (
+              <div className="mt-3 border-t border-slate-800 pt-3">
+                <div className="flex items-start justify-between gap-3 px-1">
+                  <div>
+                    <div className="text-[10px] font-bold text-white">Mobile controls</div>
+                    <div className="mt-0.5 text-[8px] leading-relaxed text-slate-500">
+                      Wheel and pedals save separately for portrait and landscape.
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-slate-400">
+                    {mobileOrientation}
+                  </span>
+                </div>
+
+                {!mobileLayoutEditing ? (
+                  <div className="mt-2">
+                    <div className="grid grid-cols-2 gap-1.5 text-[8px]">
+                      <div className="rounded-lg bg-slate-900/65 p-2 text-slate-400">
+                        Wheel <span className="font-bold text-sky-300">{Math.round(activeMobileLayout.wheel.scale * 100)}%</span>
+                      </div>
+                      <div className="rounded-lg bg-slate-900/65 p-2 text-slate-400">
+                        Pedals <span className="font-bold text-emerald-300">{Math.round(activeMobileLayout.pedals.scale * 100)}%</span>
+                      </div>
+                    </div>
+                    <button
+                      id="mobile-layout-edit-btn"
+                      type="button"
+                      onClick={beginMobileLayoutEdit}
+                      className="mt-2 w-full rounded-xl border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-sky-200 active:bg-sky-400 active:text-slate-950"
+                    >
+                      Customize layout
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-xl border border-sky-400/25 bg-sky-400/5 p-2.5">
+                    <div className="text-[8px] leading-relaxed text-sky-100/80">
+                      Drag the wheel and pedal cluster directly on the driving view. Size changes preview live until you save.
+                    </div>
+
+                    <label className="mt-3 block">
+                      <div className="mb-1 flex items-center justify-between text-[8px] font-bold text-slate-300">
+                        <span>Wheel size</span>
+                        <span className="text-sky-300">{Math.round(activeMobileLayout.wheel.scale * 100)}%</span>
+                      </div>
+                      <input
+                        id="mobile-wheel-size"
+                        type="range"
+                        min={MOBILE_WHEEL_SCALE_MIN}
+                        max={MOBILE_WHEEL_SCALE_MAX}
+                        step={0.05}
+                        value={activeMobileLayout.wheel.scale}
+                        onChange={(event) => updateMobileClusterScale('wheel', Number(event.target.value))}
+                        className="w-full accent-sky-400"
+                      />
+                    </label>
+
+                    <label className="mt-3 block">
+                      <div className="mb-1 flex items-center justify-between text-[8px] font-bold text-slate-300">
+                        <span>Pedal size</span>
+                        <span className="text-emerald-300">{Math.round(activeMobileLayout.pedals.scale * 100)}%</span>
+                      </div>
+                      <input
+                        id="mobile-pedals-size"
+                        type="range"
+                        min={MOBILE_PEDALS_SCALE_MIN}
+                        max={MOBILE_PEDALS_SCALE_MAX}
+                        step={0.05}
+                        value={activeMobileLayout.pedals.scale}
+                        onChange={(event) => updateMobileClusterScale('pedals', Number(event.target.value))}
+                        className="w-full accent-emerald-400"
+                      />
+                    </label>
+
+                    <div className="mt-3 grid grid-cols-2 gap-1.5">
+                      <button
+                        id="mobile-layout-save-btn"
+                        type="button"
+                        onClick={saveMobileLayoutEdit}
+                        className="rounded-lg bg-sky-400 px-2 py-2 text-[8px] font-black uppercase tracking-wider text-slate-950 active:bg-sky-300"
+                      >
+                        Save
+                      </button>
+                      <button
+                        id="mobile-layout-cancel-btn"
+                        type="button"
+                        onClick={cancelMobileLayoutEdit}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-[8px] font-black uppercase tracking-wider text-slate-300 active:bg-slate-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    <button
+                      id="mobile-layout-reset-btn"
+                      type="button"
+                      onClick={resetCurrentMobileLayout}
+                      className="mt-1.5 w-full rounded-lg px-2 py-2 text-[8px] font-bold text-slate-500 active:bg-slate-900 active:text-white"
+                    >
+                      Reset {mobileOrientation} layout
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {!mobileMode && (
               <div className="mt-3 border-t border-slate-800 pt-3">
@@ -370,7 +569,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           </div>
           {mobileMode ? (
             <div className="grid grid-cols-2 gap-1.5 font-mono">
-              <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-sky-300">← / →</span><br />Steer</div>
+              <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-sky-300">WHEEL</span><br />Analog steer</div>
               <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-emerald-300">GAS</span><br />Throttle</div>
               <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-rose-300">BRAKE</span><br />Brake</div>
               <div className="rounded-lg bg-slate-900/65 p-2"><span className="text-amber-300">HB</span><br />Handbrake</div>
@@ -408,7 +607,11 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
       {mobileMode && (
         <MobileDrivingControls
+          layout={activeMobileLayout}
+          editMode={mobileLayoutEditing}
+          onLayoutChange={updateMobileLayoutDraftPair}
           onTouchInput={onTouchInput}
+          onTouchSteer={onTouchSteer}
           onNextCamera={onNextCamera}
           onReset={onReset}
         />
@@ -422,119 +625,3 @@ const KeyCap: React.FC<{ active: boolean; label: string; activeClass: string }> 
     {label}
   </div>
 );
-
-const MobileDrivingControls: React.FC<{
-  onTouchInput: (action: TouchAction, active: boolean) => void;
-  onNextCamera: () => void;
-  onReset: () => void;
-}> = ({ onTouchInput, onNextCamera, onReset }) => (
-  <>
-    <div id="mobile-landscape-hint" className="pointer-events-none absolute left-1/2 top-16 z-30 hidden -translate-x-1/2 rounded-full border border-slate-700/80 bg-slate-950/82 px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300 shadow-xl backdrop-blur-lg">
-      Rotate for the best driving view
-    </div>
-
-    <div
-      id="mobile-driving-controls"
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-end justify-between gap-3"
-      style={{
-        paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
-        paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
-        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
-      }}
-    >
-      <div id="mobile-steering-pad" className="pointer-events-auto flex flex-col items-start gap-1.5">
-        <span className="pl-1 text-[8px] font-black uppercase tracking-[0.2em] text-slate-300/90">Steer</span>
-        <div className="flex gap-2">
-          <MobileTouchButton
-            label="←"
-            ariaLabel="Steer left"
-            className="mobile-steer-button h-[5.25rem] w-[5.25rem] text-3xl active:border-sky-300 active:bg-sky-400 active:text-slate-950"
-            onActiveChange={(active) => onTouchInput(mapMobileSteeringDirection('left'), active)}
-          />
-          <MobileTouchButton
-            label="→"
-            ariaLabel="Steer right"
-            className="mobile-steer-button h-[5.25rem] w-[5.25rem] text-3xl active:border-sky-300 active:bg-sky-400 active:text-slate-950"
-            onActiveChange={(active) => onTouchInput(mapMobileSteeringDirection('right'), active)}
-          />
-        </div>
-      </div>
-
-      <div id="mobile-quick-actions" className="pointer-events-auto absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-1.5" style={{ marginBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-        <button
-          type="button"
-          onClick={onNextCamera}
-          className="flex h-9 items-center gap-1 rounded-full border border-slate-600/90 bg-slate-950/72 px-3 text-[9px] font-bold text-slate-100 shadow-lg backdrop-blur-lg active:bg-slate-800"
-          aria-label="Change camera"
-        >
-          <Camera size={13} /> CAM
-        </button>
-        <button
-          type="button"
-          onClick={onReset}
-          className="flex h-9 items-center gap-1 rounded-full border border-slate-600/90 bg-slate-950/72 px-3 text-[9px] font-bold text-slate-100 shadow-lg backdrop-blur-lg active:bg-amber-300 active:text-slate-950"
-          aria-label="Reset car"
-        >
-          <RotateCcw size={13} /> RESET
-        </button>
-      </div>
-
-      <div id="mobile-pedal-pad" className="pointer-events-auto flex items-end gap-2">
-        <MobileTouchButton
-          label="HB"
-          ariaLabel="Handbrake"
-          className="mobile-handbrake h-14 w-14 text-[11px] active:border-amber-300 active:bg-amber-300 active:text-slate-950"
-          onActiveChange={(active) => onTouchInput('handbrake', active)}
-        />
-        <MobileTouchButton
-          label="BRAKE"
-          ariaLabel="Brake"
-          className="mobile-brake h-[6.25rem] w-[4.75rem] text-[10px] active:border-rose-300 active:bg-rose-400 active:text-slate-950"
-          onActiveChange={(active) => onTouchInput('brake', active)}
-        />
-        <MobileTouchButton
-          label="GAS"
-          ariaLabel="Throttle"
-          className="mobile-throttle h-[7.25rem] w-[5rem] text-xs active:border-emerald-300 active:bg-emerald-400 active:text-slate-950"
-          onActiveChange={(active) => onTouchInput('throttle', active)}
-        />
-      </div>
-    </div>
-  </>
-);
-
-const MobileTouchButton: React.FC<{
-  label: string;
-  ariaLabel: string;
-  className: string;
-  onActiveChange: (active: boolean) => void;
-}> = ({ label, ariaLabel, className, onActiveChange }) => {
-  const pointerIdRef = React.useRef<number | null>(null);
-
-  const deactivate = (event?: React.PointerEvent<HTMLButtonElement>) => {
-    if (event && pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) return;
-    pointerIdRef.current = null;
-    onActiveChange(false);
-  };
-
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        if (pointerIdRef.current !== null) return;
-        pointerIdRef.current = event.pointerId;
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-        onActiveChange(true);
-      }}
-      onPointerUp={deactivate}
-      onPointerCancel={deactivate}
-      onLostPointerCapture={deactivate}
-      onContextMenu={(event) => event.preventDefault()}
-      className={`${className} flex touch-none select-none items-center justify-center rounded-[1.5rem] border border-white/25 bg-slate-950/54 font-black text-white shadow-2xl backdrop-blur-sm transition-[transform,background-color,border-color] duration-75 active:scale-[0.96]`}
-    >
-      {label}
-    </button>
-  );
-};
