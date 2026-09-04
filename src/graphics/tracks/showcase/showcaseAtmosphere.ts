@@ -1,9 +1,8 @@
 import * as THREE from 'three';
-import { TRACK_CENTER_X } from '../showcaseCircuit';
 
 // Sky/fog/haze only. No geometry over the racing corridor. Cheap by design:
 // one gradient dome (BackSide, fog:false) + tuned FogExp2 + 3 large haze quads.
-export function createShowcaseAtmosphere(scene: THREE.Scene): THREE.Group {
+export function createShowcaseAtmosphere(scene: THREE.Scene, trackCenterX = 560): THREE.Group {
   const group = new THREE.Group();
   group.name = 'showcase-atmosphere';
   scene.background = new THREE.Color(0x87a8bd);
@@ -24,13 +23,13 @@ export function createShowcaseAtmosphere(scene: THREE.Scene): THREE.Group {
   skyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
   const sky = new THREE.Mesh(skyGeo, skyMat);
-  sky.position.set(TRACK_CENTER_X, 40, 0);
+  sky.position.set(trackCenterX, 40, 0);
   sky.renderOrder = -10;
   group.add(sky);
   const hazeMat = new THREE.MeshBasicMaterial({ color: 0xbdd2e2, transparent: true, opacity: 0.10, depthWrite: false, fog: false });
   for (let i = 0; i < 3; i++) {
     const haze = new THREE.Mesh(new THREE.PlaneGeometry(700, 60), hazeMat);
-    haze.position.set(TRACK_CENTER_X + (i - 1) * 220, 26 + i * 9, -320 + i * 180);
+    haze.position.set(trackCenterX + (i - 1) * 220, 26 + i * 9, -320 + i * 180);
     haze.rotation.y = Math.PI / 8 + i * 0.2;
     haze.renderOrder = 2;
     group.add(haze);
