@@ -52,11 +52,15 @@ function runCorner(label: string, steerProvider: SteerProvider, durationSec: num
   let meanFrontSteerDeg = 0;
   let finalSpeedKmh = 0;
   let peakSteerInput = 0;
+  let entryPeakSteerInput = 0;
 
   const totalSteps = Math.round(durationSec / DT);
   for (let step = 0; step < totalSteps; step++) {
     const steerInput = steerProvider(sim, step);
     peakSteerInput = Math.max(peakSteerInput, Math.abs(steerInput));
+    if (step < Math.round(0.50 / DT)) {
+      entryPeakSteerInput = Math.max(entryPeakSteerInput, Math.abs(steerInput));
+    }
     const state = sim.stepExplicit({ ...zeroInputs, steer: steerInput }, 1);
     const frontSteer = (state.wheels[0].steerAngle + state.wheels[1].steerAngle) * 0.5;
     meanFrontSteerDeg = Math.abs(frontSteer) * DEG;
@@ -88,6 +92,7 @@ function runCorner(label: string, steerProvider: SteerProvider, durationSec: num
   return {
     label,
     peakSteerInput,
+    entryPeakSteerInput,
     meanFrontSteerDeg,
     peakFrontSlipDeg,
     peakRearSlipDeg,
@@ -252,7 +257,11 @@ const heldDigital = runCorner(
   'held-digital-left',
   (sim) => {
     const speedMs = Math.abs(sim.vehicle.rigidBody.getLocalVelocity().z);
-    digitalInput = updateDigitalSteeringInput(digitalInput, 1, speedMs, DT);
+    digitalInput = updateDigitalSteeringInput(digitalInput, 1, speedMs, DT, {
+      wheelbaseM: config.wheelbase,
+      maxSteerAngleRad: config.maxSteerAngle,
+      forwardSpeedMs: sim.vehicle.rigidBody.getLocalVelocity().z,
+    });
     return digitalInput;
   },
   2.0
@@ -272,7 +281,14 @@ assert(moderate.peakFrontSlipDeg < 9.0, `moderate corner gross-slid front tires:
 assert(moderate.frontSkidSamples === 0, `moderate corner emitted front skid state for ${moderate.frontSkidSamples} samples`);
 assert(moderate.meanYawResponseRatio > 0.62, `moderate corner yaw response too low: ${moderate.meanYawResponseRatio.toFixed(3)}`);
 assert(moderate.peakRearSlipDeg < 9.0, `moderate corner gross-slid rear tires: ${moderate.peakRearSlipDeg.toFixed(2)} deg`);
-assert(heldDigital.peakSteerInput > 0.99, `held digital steering must preserve full authority, got ${heldDigital.peakSteerInput.toFixed(3)}`);
+assert(
+  heldDigital.entryPeakSteerInput > 0.50 && heldDigital.entryPeakSteerInput < 0.99,
+  `30 km/h corner entry should be speed-shaped before the car slows into the full-lock crossover, got ${heldDigital.entryPeakSteerInput.toFixed(3)}`
+);
+assert(
+  heldDigital.peakSteerInput > heldDigital.entryPeakSteerInput,
+  'digital authority should grow smoothly again as the car slows toward parking/crawl speed'
+);
 assert(heldDigital.peakFrontSlipDeg < 30, `held full steering became numerically unstable: ${heldDigital.peakFrontSlipDeg.toFixed(2)} deg`);
 assert(heldDigital.meanYawResponseRatio > 0.55, `held full steering lost plausible yaw response: ${heldDigital.meanYawResponseRatio.toFixed(3)}`);
 assert(heldDigital.finalSpeedKmh > 15, `held full steering scrubbed implausibly much speed: ${heldDigital.finalSpeedKmh.toFixed(1)} km/h`);
