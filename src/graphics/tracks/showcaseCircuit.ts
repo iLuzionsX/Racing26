@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ISurfaceProvider, SurfaceSample } from '../../physics/SurfaceProvider';
+import { buildVenueLife } from './showcase/venueLife';
 
 export const TRACK_CENTER_X = 560;
 export const TRACK_WIDTH_M = 20;
@@ -727,6 +728,11 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   }
   mountains.instanceMatrix.needsUpdate = true;
   group.add(mountains);
+
+  // Premium venue dressing only. Control points, bankingAt(), widths,
+  // surface logic and spawn above are untouched. All furniture stays
+  // outside BARRIER_OFFSET_M so corridor + 18m runoff remain clear.
+  buildVenueLife(group, path, BARRIER_OFFSET_M, OUTER_RUNOFF_M);
 
   return group;
 }
