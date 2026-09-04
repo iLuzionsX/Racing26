@@ -149,6 +149,10 @@ export class Simulation {
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
+      // CarRenderer roots the visual chassis at elevationHeight and places wheels
+      // as hub.y - elevationHeight. Leaving elevationHeight at curr bypassed all
+      // smoothing above and reintroduced 120 Hz vertical steps on graded track.
+      elevationHeight: lerp(prev.elevationHeight, curr.elevationHeight, alpha),
       // CarRenderer positions the sprung body from road-relative heave rather than
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
