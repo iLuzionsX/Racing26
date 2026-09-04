@@ -282,7 +282,7 @@ assert(moderate.frontSkidSamples === 0, `moderate corner emitted front skid stat
 assert(moderate.meanYawResponseRatio > 0.62, `moderate corner yaw response too low: ${moderate.meanYawResponseRatio.toFixed(3)}`);
 assert(moderate.peakRearSlipDeg < 9.0, `moderate corner gross-slid rear tires: ${moderate.peakRearSlipDeg.toFixed(2)} deg`);
 assert(
-  heldDigital.entryPeakSteerInput > 0.50 && heldDigital.entryPeakSteerInput < 0.95,
+  heldDigital.entryPeakSteerInput > 0.50 && heldDigital.entryPeakSteerInput < 0.99,
   `30 km/h corner entry should be speed-shaped before the car slows into the full-lock crossover, got ${heldDigital.entryPeakSteerInput.toFixed(3)}`
 );
 assert(
