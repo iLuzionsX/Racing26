@@ -112,7 +112,30 @@ export function collectContext(rootDir) {
     if (shouldInclude(repoPath, stat)) files.push({ path: repoPath, bytes: stat.size, content: fs.readFileSync(absolute, 'utf8') });
   }
 
-  const priority = new Map(['AGENTS.md', 'PHYSICS_CONVENTIONS.md', 'M5_VALIDATION.md', 'package.json', 'vite.config.ts', 'tsconfig.json'].map((p, i) => [p, i]));
+  const priorityPaths = [
+    'AGENTS.md',
+    'PHYSICS_CONVENTIONS.md',
+    'M5_VALIDATION.md',
+    'package.json',
+    'src/physics/TireModel.ts',
+    'src/physics/WheelDynamics.ts',
+    'src/physics/Vehicle.ts',
+    'src/physics/m5G90.ts',
+    'src/physics/vehiclePresets.ts',
+    'src/physics/SurfaceProvider.ts',
+    'src/physics/Simulation.ts',
+    'src/physics/tests/TireModelTests.ts',
+    'src/physics/tests/M5TransientResponseTests.ts',
+    'src/physics/tests/LowSpeedCorneringTests.ts',
+    'src/physics/tests/HighSpeedKeyboardCorneringTests.ts',
+    'src/physics/validation/ValidationTestSkidpad.ts',
+    'src/physics/validation/ValidationTestStepSteer.ts',
+    'src/physics/validation/M5ReferenceData.ts',
+    'src/physics/validation/M5ValidationRunner.ts',
+    'vite.config.ts',
+    'tsconfig.json',
+  ];
+  const priority = new Map(priorityPaths.map((p, i) => [p, i]));
   files.sort((a, b) => (priority.get(a.path) ?? 100) - (priority.get(b.path) ?? 100) || a.path.localeCompare(b.path));
 
   const selected = [];
