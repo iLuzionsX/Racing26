@@ -441,12 +441,12 @@ const MobileDrivingControls: React.FC<{
       id="mobile-driving-controls"
       className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-end justify-between gap-3"
       style={{
-        paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
-        paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
-        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1.25rem, calc(env(safe-area-inset-left) + 0.75rem))',
+        paddingRight: 'max(1rem, calc(env(safe-area-inset-right) + 0.5rem))',
+        paddingBottom: 'max(1.1rem, calc(env(safe-area-inset-bottom) + 0.6rem))',
       }}
     >
-      <div id="mobile-steering-pad" className="pointer-events-auto flex flex-col items-start gap-1.5">
+      <div id="mobile-steering-pad" className="pointer-events-auto flex flex-col items-start gap-1.5" style={{ marginLeft: '0.25rem', marginBottom: '0.35rem' }}>
         <span className="pl-1 text-[8px] font-black uppercase tracking-[0.2em] text-slate-300/90">Steer</span>
         <MobileSteeringWheel onSteerChange={onTouchSteer} />
       </div>

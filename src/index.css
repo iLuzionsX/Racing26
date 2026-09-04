@@ -117,6 +117,15 @@ html[data-driving-mobile='true'] #mobile-pedal-pad {
   filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.28));
 }
 
+html[data-driving-mobile='true'] #mobile-steering-pad {
+  /* Thumb-reach breathing room off left/bottom bezel; container already adds safe-area. */
+  margin-left: 0.35rem;
+  margin-bottom: 0.35rem;
+  padding: 0.35rem;
+  padding-left: max(0.35rem, calc(env(safe-area-inset-left) * 0.5));
+  padding-bottom: max(0.35rem, calc(env(safe-area-inset-bottom) * 0.5));
+}
+
 html[data-driving-mobile='true'] #mobile-steering-wheel {
   width: clamp(7rem, 24vw, 9rem);
   height: clamp(7rem, 24vw, 9rem);
