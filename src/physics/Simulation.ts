@@ -153,6 +153,14 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // Showcase base elevation changes every fixed step on grade/banking. Leaving
+      // elevationHeight at curr reintroduces 120 Hz vertical stepping while x/z/heave/hub
+      // are smooth, and makes wheel local Y (hub.y - elevationHeight) jitter in opposite phase.
+      elevationHeight: lerp(
+        Number.isFinite((prev as any).elevationHeight) ? (prev as any).elevationHeight : (curr as any).elevationHeight,
+        Number.isFinite((curr as any).elevationHeight) ? (curr as any).elevationHeight : (prev as any).elevationHeight,
+        alpha
+      ),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
