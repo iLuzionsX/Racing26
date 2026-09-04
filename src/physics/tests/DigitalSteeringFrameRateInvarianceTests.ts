@@ -117,15 +117,27 @@ for (const result of leftRuns) {
 
 const left = leftRuns.find((entry) => entry.name === '120Hz')!;
 const right = rightRuns.find((entry) => entry.name === '120Hz')!;
-assert(Math.abs(left.digital + right.digital) < 1e-10, 'digital steering must mirror left/right');
-assert(Math.abs(left.x + right.x) < 0.05, 'lateral trajectory must mirror left/right');
-assert(Math.abs(left.yaw + right.yaw) < 0.01, 'yaw must mirror left/right');
-assert(Math.abs(left.yawRate + right.yawRate) < 0.01, 'yaw rate must mirror left/right');
-assert(Math.abs(left.actualSteer + right.actualSteer) < 0.01, 'rack angle must mirror left/right');
 
 console.log(JSON.stringify({
   scenario: 'Digital Driver V3 render-frame invariance',
   leftRuns,
   rightRuns,
+  mirrorDelta: {
+    digital: left.digital + right.digital,
+    x: left.x + right.x,
+    yaw: left.yaw + right.yaw,
+    yawRate: left.yawRate + right.yawRate,
+    actualSteer: left.actualSteer + right.actualSteer,
+  },
 }, null, 2));
+
+assert(
+  Math.abs(left.digital + right.digital) < 1e-10,
+  `digital steering must mirror left/right: left=${left.digital}, right=${right.digital}, sum=${left.digital + right.digital}`
+);
+assert(Math.abs(left.x + right.x) < 0.05, 'lateral trajectory must mirror left/right');
+assert(Math.abs(left.yaw + right.yaw) < 0.01, 'yaw must mirror left/right');
+assert(Math.abs(left.yawRate + right.yawRate) < 0.01, 'yaw rate must mirror left/right');
+assert(Math.abs(left.actualSteer + right.actualSteer) < 0.01, 'rack angle must mirror left/right');
+
 console.log('DigitalSteeringFrameRateInvarianceTests: PASS');
