@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import type { ISurfaceProvider, SurfaceSample } from '../../physics/SurfaceProvider';
 import { disposeShowcaseGroup, finalizeInstancedMesh, finalizeStaticMesh } from './showcase/trackPerformance';
+import { createShowcaseLightingRig, isMobileGpu } from './showcase/showcaseLighting';
+import { createShowcaseAtmosphere } from './showcase/showcaseAtmosphere';
+import { createShowcaseSurfaceMaterials } from './showcase/showcaseSurfaceMaterials';
+import { buildShowcaseRoadDetails } from './showcase/showcaseRoadDetails';
+import { buildBrakingBoardFamily, buildFictionalBanner, buildMarshalPost, buildTimingSectorObjects } from './showcase/tracksideProps';
+import { buildCrowdCluster, makeSeededRandom, makeSeatedGrid } from './showcase/crowd';
+import { tryComposeKenneyVenueGroup } from './showcase/kenneyVenueAssets';
+import { buildTerrainComposition } from './showcase/terrainComposition';
 
 export const TRACK_CENTER_X = 560;
 export const TRACK_WIDTH_M = 20;
@@ -393,14 +401,6 @@ function buildTerrainBerm(path: ShowcaseTrackPath, segments = 420): THREE.Buffer
   return geometry;
 }
 
-function seededRandomFactory(seed = 0x51f15e): () => number {
-  let value = seed >>> 0;
-  return () => {
-    value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
-    return value / 0x100000000;
-  };
-}
-
 function trackQuaternion(sample: TrackSample): THREE.Quaternion {
   const basis = new THREE.Matrix4().makeBasis(
     sample.bankedLateral,
@@ -475,30 +475,19 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   const group = new THREE.Group();
   group.name = 'muse-showcase-circuit-v2';
 
-  const hemi = new THREE.HemisphereLight(0xdff4ff, 0x27321f, 1.0);
-  const sun = new THREE.DirectionalLight(0xfff0cf, 1.9);
-  sun.position.set(TRACK_CENTER_X + 180, 230, -150);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -320;
-  sun.shadow.camera.right = 320;
-  sun.shadow.camera.top = 320;
-  sun.shadow.camera.bottom = -320;
-  sun.shadow.camera.near = 20;
-  sun.shadow.camera.far = 700;
-  group.add(hemi, sun);
+  const lighting = createShowcaseLightingRig(isMobileGpu(), TRACK_CENTER_X);
+  group.add(lighting.hemi, lighting.sun);
 
+  const surfaceMats = createShowcaseSurfaceMaterials();
+  group.userData.showcaseSurfaceMaterials = surfaceMats;
   const terrainMaterial = new THREE.MeshStandardMaterial({ color: 0x526044, roughness: 1 });
-  const runoffMaterial = new THREE.MeshStandardMaterial({ color: 0x666b6f, roughness: 0.96 });
+  const runoffMaterial = surfaceMats.runoffSpeckle;
   const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.75 });
-  const asphaltMaterial = new THREE.MeshStandardMaterial({ color: 0x171b20, roughness: 0.91, metalness: 0.04 });
-  const concreteMaterial = new THREE.MeshStandardMaterial({ color: 0x929aa1, roughness: 0.82 });
+  const asphaltMaterial = surfaceMats.asphalt;
+  const concreteMaterial = surfaceMats.barrierConcrete;
   const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x29333d, metalness: 0.67, roughness: 0.42 });
   const redMaterial = new THREE.MeshStandardMaterial({ color: 0xd62f2f, roughness: 0.58 });
   const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.54 });
-  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x665b4d, roughness: 1 });
-  const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3829, roughness: 1 });
-  const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x244b2d, roughness: 1 });
   const cyanMaterial = new THREE.MeshStandardMaterial({
     color: 0x22d3ee,
     emissive: 0x075985,
@@ -601,39 +590,13 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   addTrackAlignedBox(group, pitSample, pitLaneGeometry, asphaltMaterial, pitLaneOffset, 0.02);
   addTrackAlignedBox(group, pitSample, pitWallGeometry, concreteMaterial, -(OUTER_RUNOFF_M + 2.0), 0.55);
 
-  const paddockGeometry = new THREE.BoxGeometry(32, 10, 130);
-  const paddock = addTrackAlignedBox(group, pitSample, paddockGeometry, metalMaterial, -(OUTER_RUNOFF_M + 28), 5.0);
-  paddock.castShadow = true;
-  const roofGeometry = new THREE.BoxGeometry(36, 0.8, 136);
-  addTrackAlignedBox(group, pitSample, roofGeometry, redMaterial, -(OUTER_RUNOFF_M + 28), 10.4);
-
-  const standSample = path.sampleAt(0.03);
-  // All five rows share identical dimensions: one geometry, no visual change.
-  const standGeometry = new THREE.BoxGeometry(72, 1.1, 6.8);
-  for (let row = 0; row < 5; row++) {
-    addTrackAlignedBox(
-      group,
-      standSample,
-      standGeometry,
-      concreteMaterial,
-      OUTER_RUNOFF_M + 12 + row * 1.6,
-      0.6 + row * 1.25,
-    );
-  }
-
-  // Braking boards before the southwest technical corner.
-  for (const [label, u] of [['150', 0.78], ['100', 0.795], ['50', 0.81]] as const) {
-    const s = path.sampleAt(u);
-    const texture = makeNumberBoardTexture(label);
-    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2.5), material);
-    board.position
-      .copy(s.center)
-      .addScaledVector(s.lateral, -(BARRIER_OFFSET_M + 4.0));
-    board.position.y += 2.0;
-    board.rotation.y = Math.atan2(s.tangent.x, s.tangent.z) + Math.PI / 2;
-    group.add(board);
-  }
+  // Real CC0 venue assets replace the old primitive paddock block and concrete stand rows.
+  // Keep the physical-looking pit lane and pit wall as immediate procedural fallback structure.
+  const tracksideContext = { path, barrierOffsetM: BARRIER_OFFSET_M };
+  buildBrakingBoardFamily(group, tracksideContext, { approachU: 0.81, side: -1 });
+  buildTimingSectorObjects(group, tracksideContext, { u: 0.43, sectorName: 'SUMMIT' });
+  buildMarshalPost(group, tracksideContext, { u: 0.655, side: -1, lightColor: 0xfacc15 });
+  buildFictionalBanner(group, tracksideContext, { u: 0.205, brandId: 'nordlys', side: 1 });
 
   // Summit landmark: spectacle remains, but its supports stay outside recovery space.
   const summit = path.sampleAt(0.43);
@@ -651,101 +614,53 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   halo.rotation.x = Math.PI / 2.5;
   group.add(halo);
 
-  // Open rock-cut rather than tunnel posts inside the runoff.
-  const rng = seededRandomFactory();
-  const rockGeometry = new THREE.DodecahedronGeometry(1, 0);
-  const rockCount = 120;
-  const rocks = new THREE.InstancedMesh(rockGeometry, rockMaterial, rockCount);
-  let rockIndex = 0;
-  for (let i = 0; i < 60; i++) {
-    const s = path.sampleAt(0.54 + (i / 60) * 0.16);
-    for (const side of [-1, 1]) {
-      const size = 3.5 + rng() * 5.0;
-      const offset = BARRIER_OFFSET_M + 8 + rng() * 14;
-      const position = s.center.clone().addScaledVector(s.lateral, side * offset);
-      position.y += size * 0.35;
-      const quaternion = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(rng() * 0.25, rng() * Math.PI, rng() * 0.25),
-      );
-      matrix.compose(position, quaternion, new THREE.Vector3(size, size * (1.1 + rng() * 0.7), size));
-      rocks.setMatrixAt(rockIndex++, matrix);
-    }
+  // Layered alpine depth replaces the old uniform rock/tree/mountain bands.
+  group.add(buildTerrainComposition(path, {
+    barrierOffsetM: BARRIER_OFFSET_M,
+    bermHalfWidthM: TERRAIN_BERM_HALF_WIDTH_M,
+    trackCenterX: TRACK_CENTER_X,
+  }));
+
+  // Visual-only road micro-detail. Physics SurfaceProvider remains untouched.
+  group.add(buildShowcaseRoadDetails(path, {
+    gridBox: surfaceMats.gridBox,
+    paintArrow: surfaceMats.paintArrow,
+    seamPatch: surfaceMats.seamPatch,
+    edgeWear: surfaceMats.edgeWear,
+    drainageGrate: surfaceMats.drainageGrate,
+    pitConcrete: surfaceMats.pitConcrete,
+  }, {
+    barrierOffsetM: BARRIER_OFFSET_M,
+    outerRunoffM: OUTER_RUNOFF_M,
+    seed: 1234,
+    yLiftM: 0.04,
+    maxArrows: 8,
+    maxGrates: 14,
+  }));
+
+  // Two compact race-day crowd clusters: four instanced draws total.
+  const crowdRoot = new THREE.Group();
+  crowdRoot.name = 'showcase-race-day-crowd';
+  const crowdRng = makeSeededRandom(0xc20d);
+  for (const [u, side] of [[0.035, 1], [0.365, 1]] as const) {
+    const s = path.sampleAt(u);
+    const placements = makeSeatedGrid(3, 10, 0.62, 0.46, 0.72, 0.48, crowdRng);
+    const cluster = buildCrowdCluster(placements, crowdRng);
+    cluster.position.copy(s.center)
+      .addScaledVector(s.bankedLateral, side * (BARRIER_OFFSET_M + 11))
+      .addScaledVector(s.normal, 1.1);
+    cluster.quaternion.copy(trackQuaternion(s));
+    crowdRoot.add(cluster);
   }
-  rocks.count = rockIndex;
-  rocks.instanceMatrix.needsUpdate = true;
-  rocks.castShadow = true;
-  group.add(rocks);
-
-  // Sparse deterministic vegetation; every tree starts outside the barrier corridor.
-  const treeCount = 120;
-  const trunkGeometry = new THREE.CylinderGeometry(0.18, 0.28, 3.8, 6);
-  const crownGeometry = new THREE.ConeGeometry(1.9, 5.8, 7);
-  const trunks = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, treeCount);
-  const crowns = new THREE.InstancedMesh(crownGeometry, foliageMaterial, treeCount);
-
-  for (let i = 0; i < treeCount; i++) {
-    const s = path.sampleAt((i / treeCount + rng() * 0.006) % 1);
-    const side = i % 2 === 0 ? 1 : -1;
-    const offset = BARRIER_OFFSET_M + 18 + rng() * 28;
-    const position = s.center.clone().addScaledVector(s.lateral, side * offset);
-    const absOffset = Math.abs(offset);
-    const roadY = s.center.y + s.bankedLateral.y * (side * offset) - 0.4;
-    const terrainT = THREE.MathUtils.clamp((absOffset - 34) / (TERRAIN_BERM_HALF_WIDTH_M - 34), 0, 1);
-    const terrainSmooth = terrainT * terrainT * (3 - 2 * terrainT);
-    const baseY = THREE.MathUtils.lerp(roadY, 0, terrainSmooth);
-
-    matrix.compose(
-      new THREE.Vector3(position.x, baseY + 1.9, position.z),
-      new THREE.Quaternion(),
-      new THREE.Vector3(1, 1, 1),
-    );
-    trunks.setMatrixAt(i, matrix);
-    matrix.compose(
-      new THREE.Vector3(position.x, baseY + 5.4, position.z),
-      new THREE.Quaternion(),
-      new THREE.Vector3(1, 1, 1),
-    );
-    crowns.setMatrixAt(i, matrix);
-  }
-  trunks.instanceMatrix.needsUpdate = true;
-  crowns.instanceMatrix.needsUpdate = true;
-  group.add(trunks, crowns);
-  finalizeInstancedMesh(rocks);
-  finalizeInstancedMesh(trunks);
-  finalizeInstancedMesh(crowns);
-
-  // Distant mountains are intentionally beyond every local track corridor.
-  const mountainGeometry = new THREE.ConeGeometry(1, 1, 7);
-  const mountainMaterial = new THREE.MeshStandardMaterial({ color: 0x536069, roughness: 1 });
-  const mountainCount = 20;
-  const mountains = new THREE.InstancedMesh(mountainGeometry, mountainMaterial, mountainCount);
-  for (let i = 0; i < mountainCount; i++) {
-    const angle = (i / mountainCount) * Math.PI * 2;
-    const radius = 610 + rng() * 100;
-    const height = 100 + rng() * 110;
-    const radiusScale = 60 + rng() * 65;
-    matrix.compose(
-      new THREE.Vector3(
-        TRACK_CENTER_X + Math.cos(angle) * radius,
-        height / 2 - 5,
-        Math.sin(angle) * radius,
-      ),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng() * Math.PI, 0)),
-      new THREE.Vector3(radiusScale, height, radiusScale),
-    );
-    mountains.setMatrixAt(i, matrix);
-  }
-  mountains.instanceMatrix.needsUpdate = true;
-  group.add(mountains);
-  finalizeInstancedMesh(mountains);
+  group.add(crowdRoot);
 
   return group;
 }
 
 function disposeGroup(group: THREE.Group): void {
-  // Includes InstancedMesh.dispose() for GPU instance buffers; geometry /
-  // material / texture disposal remains deduped and behavior-preserving.
+  const stagedSurfaceMaterials = group.userData.showcaseSurfaceMaterials as { dispose?: () => void } | undefined;
   disposeShowcaseGroup(group);
+  stagedSurfaceMaterials?.dispose?.();
 }
 
 export function createShowcaseCircuit(scene: THREE.Scene): ShowcaseCircuitRuntime {
@@ -755,11 +670,39 @@ export function createShowcaseCircuit(scene: THREE.Scene): ShowcaseCircuitRuntim
   surfaceProvider.resetHint(spawn.elevation);
   scene.add(group);
 
+  // Scene atmosphere is visual-only and keeps one sky draw + one distant haze draw.
+  group.add(createShowcaseAtmosphere(scene, TRACK_CENTER_X));
+
+  let disposed = false;
+  const kenneyAssetIds = [
+    'grandStandCovered',
+    'grandStandCoveredRound',
+    'pitsGarage',
+    'pitsOffice',
+    'tentLong',
+    'raceCarGreen',
+    'raceCarOrange',
+  ] as const;
+
+  void tryComposeKenneyVenueGroup({
+    path: SHOWCASE_PATH,
+    barrierOffsetM: BARRIER_OFFSET_M,
+    outerRunoffM: OUTER_RUNOFF_M,
+    include: [...kenneyAssetIds],
+  }).then((venueGroup) => {
+    if (disposed) {
+      disposeShowcaseGroup(venueGroup);
+      return;
+    }
+    if (venueGroup.children.length > 0) group.add(venueGroup);
+  });
+
   return {
     group,
     surfaceProvider,
     spawn,
     dispose: () => {
+      disposed = true;
       scene.remove(group);
       disposeGroup(group);
     },
