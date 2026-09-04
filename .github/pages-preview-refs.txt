@@ -11,3 +11,4 @@ pr-94|fix/tire-feel-steering-ratio
 pr-120|fix/mobile-wheel-center-guard
 pr-121|handling-digital-driver-v3-max
 pr-122|handling-diff-lock-continuity
+pr-123|handling-v3-integrated
