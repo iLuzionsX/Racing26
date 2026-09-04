@@ -295,6 +295,39 @@ export default function App() {
     };
 
     const handlePointerLeave = () => {
+      if (steeringInputModeRef.current === 'mouse') mouseSteerInputRef.current = 0;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
+
+    let animationFrameId: number;
+    let lastTime = performance.now();
+    let hudUpdateTimer = 0;
+
+    const animate = (currentTime: number) => {
+      animationFrameId = requestAnimationFrame(animate);
+
+      const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.05);
+      lastTime = currentTime;
+
+      const keys = keysDownRef.current;
+      const touches = touchInputsRef.current;
+      const inputBlocked = isStartMenuOpenRef.current;
+
+      const isThrottle = !inputBlocked && (keys['KeyW'] || keys['ArrowUp'] || touches.throttle);
+      const isBrake = !inputBlocked && (keys['KeyS'] || keys['ArrowDown'] || touches.brake);
+      const isLeft = !inputBlocked && (keys['KeyA'] || keys['ArrowLeft'] || touches.steerLeft);
+      const isRight = !inputBlocked && (keys['KeyD'] || keys['ArrowRight'] || touches.steerRight);
+      const isHandbrake = !inputBlocked && (keys['Space'] || touches.handbrake);
+
+      const throttleInput = isThrottle ? 1.0 : 0;
+      const brakeInput = isBrake ? 1.0 : 0;
+      const touchSteeringActive = touches.steerLeft || touches.steerRight;
+      let steerInput: number;
+
       if (steeringInputModeRef.current === 'mouse' && !touchSteeringActive && !inputBlocked) {
         // Analog pointer/wheel input directly represents a fraction of the
         // physical steering rack. It intentionally bypasses digital-driver shaping.
