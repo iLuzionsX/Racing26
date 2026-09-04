@@ -92,7 +92,13 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
   airbrakeEnabled: false,
 
   drivetrain: 'AWD',
+  // BMW documents the G90's Active M Differential as the electronically
+  // controlled rear-axle unit; M xDrive's transfer-case clutch handles the
+  // variable front/rear split. Do not apply the rear active-lock law to the
+  // front axle, where it biases drive torque toward the slower inside wheel.
   differentialType: 'TORQUE_VECTOR',
+  frontDifferentialType: 'OPEN',
+  rearDifferentialType: 'TORQUE_VECTOR',
   centerFrontTorqueRatio: 0.40,
   diffPowerRamp: 0.88,
   diffCoastRamp: 0.48,
