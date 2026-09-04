@@ -13,6 +13,13 @@
   overscroll-behavior: none;
 }
 
+#driving-simulator-app input,
+#driving-simulator-app textarea,
+#driving-simulator-app [contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 #driving-simulator-app img {
   -webkit-user-drag: none;
   user-select: none;
