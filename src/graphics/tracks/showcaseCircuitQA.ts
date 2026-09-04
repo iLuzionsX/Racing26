@@ -439,7 +439,7 @@ export function runShowcaseCircuitQA(): Result[] {
 
     record({
       id: 'surface-widths-and-boundaries',
-      status: mismatches > 0 || maximumBoundaryJump > 0.04 ? 'FAIL' : 'PASS',
+      status: mismatches > 0 || maximumBoundaryJump > 0.005 ? 'FAIL' : 'PASS',
       summary: `mismatches=${mismatches} maxBoundaryJump=${(maximumBoundaryJump * 1000).toFixed(1)}mm`,
       details: [
         ...details,
