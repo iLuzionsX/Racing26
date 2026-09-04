@@ -9,7 +9,7 @@ on:
         type: string
   push:
     branches:
-      - fix/track-surface-jitter
+      - main
     paths:
       - .github/muse-task.txt
   pull_request:
@@ -24,10 +24,6 @@ permissions:
 
 jobs:
   delegate:
-    strategy:
-      fail-fast: false
-      matrix:
-        agent: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -47,49 +43,16 @@ jobs:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           DISPATCH_TASK: ${{ github.event.inputs.task }}
         run: |
-          BASE_TASK="$DISPATCH_TASK"
-          if [ -z "$BASE_TASK" ]; then
-            BASE_TASK="$(cat .github/muse-task.txt)"
+          MUSE_TASK="$DISPATCH_TASK"
+          if [ -z "$MUSE_TASK" ]; then
+            MUSE_TASK="$(cat .github/muse-task.txt)"
           fi
-          case "${{ matrix.agent }}" in
-            1) FOCUS="continuous track-surface projection correctness and geometry math" ;;
-            2) FOCUS="surface normal, grade, and banking continuity under wheel-by-wheel sampling" ;;
-            3) FOCUS="closed-loop seam and centerline segment projection edge cases" ;;
-            4) FOCUS="kerb/runoff/road boundary continuity and whether edge transitions excite suspension" ;;
-            5) FOCUS="unsprung-mass numerical stability with the M5 tire vertical stiffness" ;;
-            6) FOCUS="tire vertical damping and high-frequency wheel-hop behavior without masking defects by tuning" ;;
-            7) FOCUS="suspension spring/damper force signs and chassis-vs-unsprung reaction consistency" ;;
-            8) FOCUS="bump-stop and hard-stop discontinuities that can create chatter" ;;
-            9) FOCUS="anti-roll-bar and cross-coupling forces during small alternating wheel travel" ;;
-            10) FOCUS="explicit integration stability and whether internal suspension substepping is warranted" ;;
-            11) FOCUS="120 Hz fixed-step accumulator cadence, frame spikes, and state handoff" ;;
-            12) FOCUS="chassis heave interpolation and renderer usage of road-relative vertical pose" ;;
-            13) FOCUS="wheel hub position interpolation and high-refresh visual jitter" ;;
-            14) FOCUS="ground contact point interpolation and force-vector/contact visualization jitter" ;;
-            15) FOCUS="camera controller response that could amplify small chassis oscillations visually" ;;
-            16) FOCUS="CrashStability interaction with ordinary road/kerb motion and false impact stabilization" ;;
-            17) FOCUS="M5 static ride equilibrium, normal loads, and initialization transients" ;;
-            18) FOCUS="high-speed crest/compression stability on the showcase circuit" ;;
-            19) FOCUS="braking pitch/heave stability and brake-held near-stop wheel kinematics" ;;
-            20) FOCUS="kerb strike behavior and wheel-hop recovery" ;;
-            21) FOCUS="low-FPS accumulator/substep behavior and dropped accumulated time" ;;
-            22) FOCUS="120/144/165 Hz render interpolation smoothness independent of physics correctness" ;;
-            23) FOCUS="mobile/browser performance costs of the proposed continuous surface projection" ;;
-            24) FOCUS="deterministic regression-test design for chassis/wheel jitter amplitude" ;;
-            25) FOCUS="adversarial review of the new continuous-physics-surface-projection QA threshold and coverage" ;;
-            26) FOCUS="closest-segment search accuracy, wraparound, lateral offset, and local minima" ;;
-            27) FOCUS="closest-segment search runtime cost and safe optimization options" ;;
-            28) FOCUS="regression risk to the recent tire-grip/steering changes from this jitter fix" ;;
-            29) FOCUS="regression risk to track visuals/spawn/runoff/physics alignment" ;;
-            30) FOCUS="holistic adversarial review: find the most likely remaining cause of bouncing/jittering and the smallest robust fix" ;;
-          esac
-          MUSE_TASK="Agent ${{ matrix.agent }} of 30. Focus especially on: $FOCUS. $BASE_TASK"
           node scripts/muse-agent/run.mjs --task "$MUSE_TASK"
 
       - name: Materialize and validate Muse patch
         if: success()
         env:
-          MUSE_BRANCH: muse-review-${{ github.run_id }}-${{ matrix.agent }}
+          MUSE_BRANCH: muse-review-${{ github.run_id }}
         run: |
           set -euo pipefail
           artifact="$(ls -1t .muse/artifacts/*.json 2>/dev/null | head -n 1)"
