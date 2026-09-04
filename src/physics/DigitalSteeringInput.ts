@@ -131,14 +131,11 @@ export function digitalSteeringTarget(
 
   if (recoveryBlend <= 0) return direction * normalLimit;
 
-  // Once we have positively identified a slide, immediately restore meaningful
-  // opposite-lock authority, then scale continuously toward full mechanical lock
-  // with slide severity. This is input emulation only; no force or yaw torque is
-  // added and the tire model still decides what the car can physically do.
-  const recoveryAuthority = Math.max(
-    normalLimit,
-    PhysicsMath.lerp(0.45, 1.0, recoveryBlend)
-  );
+  // Blend continuously from the ordinary envelope to full mechanical lock with
+  // slide severity. This removes the entry/exit step while preserving severe-
+  // slide full-lock authority. Input emulation only; no tire/chassis force is
+  // added and the tire model still decides what the car can do.
+  const recoveryAuthority = PhysicsMath.lerp(normalLimit, 1.0, recoveryBlend);
   return direction * recoveryAuthority;
 }
 
@@ -175,14 +172,19 @@ export function updateDigitalSteeringInput(
     2.4,
     PhysicsMath.clamp((speed - 5) / 30, 0, 1)
   );
-  const ratePerSecond =
-    recoveryBlend > 0
-      ? 8.5
-      : direction === 0
+  const baseRate =
+    direction === 0
+      ? 7.0
+      : reversingDirection
         ? 7.0
-        : reversingDirection
-          ? 7.0
-          : normalWindOnRate;
+        : normalWindOnRate;
+  // Interpolate toward the 8.5 rad/s recovery slew with blend severity so
+  // threshold crossing changes rate continuously. Analog/mouse path untouched.
+  const ratePerSecond = PhysicsMath.lerp(
+    baseRate,
+    8.5,
+    PhysicsMath.clamp(recoveryBlend, 0, 1)
+  );
 
   const maxStep = ratePerSecond * dt;
   const error = target - current;
