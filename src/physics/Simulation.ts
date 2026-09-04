@@ -153,6 +153,10 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // CarRenderer root Y uses elevationHeight (road-following base) plus heave.
+      // Leaving it at curr reintroduces 120 Hz stepping on graded/banked showcase
+      // geometry. This is render interpolation only; stepExplicit/physics state is untouched.
+      elevationHeight: lerp(prev.elevationHeight, curr.elevationHeight, alpha),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
