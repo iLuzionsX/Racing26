@@ -45,6 +45,9 @@ jobs:
       - name: Cornering
         run: npm run test:cornering
 
+      - name: High-speed keyboard cornering
+        run: npm run test:keyboard-cornering
+
       - name: M5 transient response
         run: npm run test:m5-transient
 
