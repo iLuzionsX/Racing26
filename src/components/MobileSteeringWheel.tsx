@@ -7,7 +7,8 @@ import {
 
 export const MobileSteeringWheel: React.FC<{
   onSteerChange: (value: number, active: boolean) => void;
-}> = ({ onSteerChange }) => {
+  interactionEnabled?: boolean;
+}> = ({ onSteerChange, interactionEnabled = true }) => {
   const [rotationDeg, setRotationDeg] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
   const pointerRef = React.useRef<{ id: number; lastPointerAngleDeg: number } | null>(null);
@@ -29,6 +30,10 @@ export const MobileSteeringWheel: React.FC<{
     setDragging(false);
     reportRotation(0, false);
   }, [reportRotation]);
+
+  React.useEffect(() => {
+    if (!interactionEnabled) release();
+  }, [interactionEnabled, release]);
 
   React.useEffect(() => {
     const onBlur = () => release();
@@ -63,12 +68,14 @@ export const MobileSteeringWheel: React.FC<{
       id="mobile-steering-wheel"
       className={`relative touch-none select-none rounded-full ${dragging ? 'is-dragging' : ''}`}
       role="slider"
-      tabIndex={0}
+      tabIndex={interactionEnabled ? 0 : -1}
+      aria-disabled={!interactionEnabled}
       aria-label="Steering wheel"
       aria-valuemin={-1}
       aria-valuemax={1}
       aria-valuenow={Number(mobileWheelRotationToSteer(rotationDeg).toFixed(3))}
       onPointerDown={(event) => {
+        if (!interactionEnabled) return;
         event.preventDefault();
         if (pointerRef.current !== null) return;
         const pointerAngleDeg = pointerAngleForEvent(event);
@@ -81,6 +88,7 @@ export const MobileSteeringWheel: React.FC<{
         onSteerChangeRef.current(mobileWheelRotationToSteer(rotationRef.current), true);
       }}
       onPointerMove={(event) => {
+        if (!interactionEnabled) return;
         const pointer = pointerRef.current;
         if (!pointer || pointer.id !== event.pointerId) return;
         event.preventDefault();
@@ -116,6 +124,7 @@ export const MobileSteeringWheel: React.FC<{
         release();
       }}
       onKeyDown={(event) => {
+        if (!interactionEnabled) return;
         let next = rotationRef.current;
         if (event.key === 'ArrowLeft') next -= 13.5;
         else if (event.key === 'ArrowRight') next += 13.5;
@@ -126,6 +135,7 @@ export const MobileSteeringWheel: React.FC<{
         reportRotation(clamped, true);
       }}
       onKeyUp={(event) => {
+        if (!interactionEnabled) return;
         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') release();
       }}
       onBlur={release}
