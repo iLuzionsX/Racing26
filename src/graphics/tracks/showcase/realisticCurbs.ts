@@ -24,6 +24,7 @@ export interface RealisticCurbZone {
 export const CURB_SYSTEM_KIND = 'continuous-ribbon';
 export const CURB_EDGE_LINE_WIDTH_M = 0.16;
 export const CURB_STRIPE_LENGTH_M = 4.0;
+export const CURB_EDGE_DRAW_CALLS = 3;
 export const CURB_VISUAL_PROFILE_M = [0.004, 0.015, 0.020, 0.010] as const;
 export const CURB_PROFILE_FRACTIONS = [0, 0.16, 0.68, 1] as const;
 
@@ -67,45 +68,16 @@ export function deriveRealisticCurbZones(path: EdgeTrackPath, sampleCount = 720)
     if (Math.abs(smooth[i]) < Math.abs(smooth[anchor])) anchor = i;
   }
 
-  const enterThreshold = 0.0028;
-  const holdThreshold = 0.0017;
+  // Enter near ~180 m radius and hold through ~260 m radius so kerbs stay
+  // corner-specific instead of painting every gentle sweep.
+  const enterThreshold = 1 / 180;
+  const holdThreshold = 1 / 260;
   const maxGapSamples = 4;
-  const minZoneM = 24;
+  const minZoneM = 28;
   const zones: RealisticCurbZone[] = [];
 
   let active: { sign: -1 | 1; indices: number[]; trailingGap: number } | null = null;
 
-  const finish = (): void => {
-    if (!active) return;
-    const indices = active.trailingGap > 0
-      ? active.indices.slice(0, Math.max(0, active.indices.length - active.trailingGap))
-      : active.indices;
-    active = null;
-    if (!indices.length) return;
-
-    const zoneLengthM = (indices.length / sampleCount) * path.lengthM;
-    if (zoneLengthM < minZoneM) return;
-
-    let apexIndex = indices[0];
-    for (const idx of indices) {
-      if (Math.abs(smooth[idx]) > Math.abs(smooth[apexIndex])) apexIndex = idx;
-    }
-    const maxCurvature = Math.abs(smooth[apexIndex]);
-    if (maxCurvature < enterThreshold) return;
-
-    const preM = THREE.MathUtils.clamp(zoneLengthM * 0.34, 14, 34);
-    const postM = THREE.MathUtils.clamp(zoneLengthM * 0.46, 20, 44);
-    const apexU = apexIndex / sampleCount;
-    const lengthU = (preM + postM) / path.lengthM;
-    zones.push({
-      startU: wrapU(apexU - preM / path.lengthM),
-      lengthU,
-      side: active?.sign ?? (smooth[apexIndex] >= 0 ? 1 : -1),
-      apexU,
-      maxCurvature,
-      approxLengthM: preM + postM,
-    });
-  };
 
   for (let j = 0; j < sampleCount; j++) {
     const idx = (anchor + 1 + j) % sampleCount;
@@ -297,7 +269,10 @@ export function buildRunoffShoulderGeometry(
       const s = path.sampleAt(u);
       const row: THREE.Vector3[] = [];
       const uvRow: Array<[number, number]> = [];
-      for (let p = 0; p < profile.length; p++) {
+      const profileIndices = side > 0
+        ? profile.map((_, index) => index)
+        : profile.map((_, index) => profile.length - 1 - index);
+      for (const p of profileIndices) {
         const lateralM = side * (trackHalfWidthM + profile[p].d);
         row.push(
           s.center.clone()
@@ -378,7 +353,10 @@ export function buildCurbRibbonGeometry(
       const s = path.sampleAt(u);
       const row: THREE.Vector3[] = [];
       const uvRow: Array<[number, number]> = [];
-      for (let p = 0; p < CURB_PROFILE_FRACTIONS.length; p++) {
+      const profileIndices = zone.side > 0
+        ? CURB_PROFILE_FRACTIONS.map((_, index) => index)
+        : CURB_PROFILE_FRACTIONS.map((_, index) => CURB_PROFILE_FRACTIONS.length - 1 - index);
+      for (const p of profileIndices) {
         const outward = curbWidthM * CURB_PROFILE_FRACTIONS[p];
         const lateralM = zone.side * (trackHalfWidthM + outward);
         row.push(
