@@ -40,7 +40,8 @@
     "test:high-speed": "tsx src/physics/tests/HighSpeedAntiRollTests.ts",
     "test:m5-validation": "tsx src/physics/validation/M5ValidationSuite.ts --test=determinism,static-loads,mass-properties-moments,acceleration,rapid-reversal,slalom,lift-throttle --artifacts=artifacts/m5-validation/base && tsx src/physics/validation/M5ValidationRunner.ts",
     "test:m5-validation:strict": "tsx src/physics/validation/M5ValidationSuite.ts --test=determinism,static-loads,mass-properties-moments,acceleration,rapid-reversal,slalom,lift-throttle --artifacts=artifacts/m5-validation/base && tsx src/physics/validation/M5ValidationRunner.ts --strict",
-    "test:m5-validation:list": "tsx src/physics/validation/M5ValidationSuite.ts --list"
+    "test:m5-validation:list": "tsx src/physics/validation/M5ValidationSuite.ts --list",
+    "test:differential-continuity": "tsx src/physics/tests/DifferentialContinuityTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
