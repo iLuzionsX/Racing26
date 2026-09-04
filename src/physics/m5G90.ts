@@ -61,7 +61,7 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
   // B stays at 15 to protect the validated acceleration/braking envelope.
   tireStiffness: 15.0,
   tireLongitudinalStiffnessB: 15.0,
-  tireLateralStiffnessB: 12.5,
+  tireLateralStiffnessB: 13.5,
   tireLoadSensitivity: 0.000030,
   // Outside/inside corners start from their measured static axle loads rather
   // than learning a reference during the first few seconds of driving.
