@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ISurfaceProvider, SurfaceSample } from '../../physics/SurfaceProvider';
+import { disposeShowcaseGroup, finalizeInstancedMesh, finalizeStaticMesh } from './showcase/trackPerformance';
 
 export const TRACK_CENTER_X = 560;
 export const TRACK_WIDTH_M = 20;
@@ -446,6 +447,8 @@ function addTrackAlignedBox(
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   group.add(mesh);
+  // Circuit group is static: freeze local matrix, no visual change.
+  finalizeStaticMesh(mesh);
   return mesh;
 }
 
@@ -583,6 +586,9 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   barriers.instanceMatrix.needsUpdate = true;
   barriers.castShadow = true;
   group.add(redCurbs, whiteCurbs, barriers);
+  finalizeInstancedMesh(redCurbs);
+  finalizeInstancedMesh(whiteCurbs);
+  finalizeInstancedMesh(barriers);
 
   addGantry(group, start, metalMaterial, cyanMaterial, 22);
   addGantry(group, path.sampleAt(0.36), metalMaterial, cyanMaterial, 16);
@@ -602,8 +608,9 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   addTrackAlignedBox(group, pitSample, roofGeometry, redMaterial, -(OUTER_RUNOFF_M + 28), 10.4);
 
   const standSample = path.sampleAt(0.03);
+  // All five rows share identical dimensions: one geometry, no visual change.
+  const standGeometry = new THREE.BoxGeometry(72, 1.1, 6.8);
   for (let row = 0; row < 5; row++) {
-    const standGeometry = new THREE.BoxGeometry(72, 1.1, 6.8);
     addTrackAlignedBox(
       group,
       standSample,
@@ -703,6 +710,9 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   trunks.instanceMatrix.needsUpdate = true;
   crowns.instanceMatrix.needsUpdate = true;
   group.add(trunks, crowns);
+  finalizeInstancedMesh(rocks);
+  finalizeInstancedMesh(trunks);
+  finalizeInstancedMesh(crowns);
 
   // Distant mountains are intentionally beyond every local track corridor.
   const mountainGeometry = new THREE.ConeGeometry(1, 1, 7);
@@ -727,33 +737,15 @@ function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   }
   mountains.instanceMatrix.needsUpdate = true;
   group.add(mountains);
+  finalizeInstancedMesh(mountains);
 
   return group;
 }
 
 function disposeGroup(group: THREE.Group): void {
-  const geometries = new Set<THREE.BufferGeometry>();
-  const materials = new Set<THREE.Material>();
-  const textures = new Set<THREE.Texture>();
-
-  group.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return;
-    if (object.geometry) geometries.add(object.geometry);
-    const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of meshMaterials) {
-      if (!material) continue;
-      materials.add(material);
-      const record = material as THREE.Material & Record<string, unknown>;
-      for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap']) {
-        const texture = record[key];
-        if (texture instanceof THREE.Texture) textures.add(texture);
-      }
-    }
-  });
-
-  geometries.forEach((geometry) => geometry.dispose());
-  textures.forEach((texture) => texture.dispose());
-  materials.forEach((material) => material.dispose());
+  // Includes InstancedMesh.dispose() for GPU instance buffers; geometry /
+  // material / texture disposal remains deduped and behavior-preserving.
+  disposeShowcaseGroup(group);
 }
 
 export function createShowcaseCircuit(scene: THREE.Scene): ShowcaseCircuitRuntime {
