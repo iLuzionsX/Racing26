@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock --no-audit --no-fund
 
+      - name: TypeScript runtime wiring check
+        run: npm run lint
+
       - name: Muse guardrail self-test
         run: node scripts/muse-agent/test.mjs
 
