@@ -1,5 +1,5 @@
-const ENDPOINT = 'https://opencode.ai/zen/v1/responses';
-const MODEL = 'muse-spark-1.3-contributor-free';
+const ENDPOINT = 'https://opencode.ai/zen/go/v1/responses';
+const MODEL = 'muse-spark-1.3-contributor';
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 export class ZenError extends Error {
@@ -89,7 +89,7 @@ export class OpenCodeZenClient {
 
   async complete({ instructions, input, maxOutputTokens = 20_000, timeoutMs = 720_000, retries = 3, signal } = {}) {
     if (!instructions || !input) throw new ZenError('INVALID_REQUEST', 'Both instructions and input are required.');
-    const body = { model: MODEL, instructions, input, max_output_tokens: maxOutputTokens };
+    const body = { model: MODEL, instructions, input, max_output_tokens: maxOutputTokens, reasoning: { effort: 'xhigh' } };
 
     let lastError = null;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
