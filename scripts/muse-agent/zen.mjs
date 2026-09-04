@@ -89,7 +89,7 @@ export class OpenCodeZenClient {
 
   async complete({ instructions, input, maxOutputTokens = 20_000, timeoutMs = 720_000, retries = 3, signal } = {}) {
     if (!instructions || !input) throw new ZenError('INVALID_REQUEST', 'Both instructions and input are required.');
-    const body = { model: MODEL, instructions, input, max_output_tokens: maxOutputTokens, reasoning: { effort: 'xhigh' } };
+    const body = { model: MODEL, instructions, input, max_output_tokens: maxOutputTokens, reasoning: { effort: 'max' } };
 
     let lastError = null;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
