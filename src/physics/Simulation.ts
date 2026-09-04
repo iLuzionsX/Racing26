@@ -153,6 +153,14 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // elevationHeight is the other half of the visual vertical basis:
+      // root Y uses elevationHeight and wheel Y uses hub.y-elevationHeight.
+      // Leaving it uninterpolated steps the body/wheels at 120 Hz on grades.
+      elevationHeight: lerp(
+        (prev as any).elevationHeight ?? prev.y,
+        (curr as any).elevationHeight ?? curr.y,
+        alpha
+      ),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
