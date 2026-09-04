@@ -24,6 +24,10 @@ import {
   wrapAngleDeg,
 } from '../../components/mobileControls';
 import {
+  frontTireSaturationLevel,
+  frontTireSaturationState,
+} from '../../components/tireSaturationCue';
+import {
   DEFAULT_MOBILE_CONTROL_LAYOUT,
   MOBILE_CONTROL_LAYOUT_STORAGE_KEY,
   clampMobileClusterCenter,
@@ -195,5 +199,59 @@ assert.equal(loadMobileSteeringRotationDeg(memoryStorage), MOBILE_STEERING_WHEEL
 assert.equal(saveMobileSteeringRotationDeg(720, memoryStorage), 720);
 assert.equal(storageMap.get(MOBILE_STEERING_ROTATION_STORAGE_KEY), '720');
 assert.equal(loadMobileSteeringRotationDeg(memoryStorage), 720);
+
+const DEG_RAD = Math.PI / 180;
+const saturation = (
+  gripUtilization: number,
+  slipDeg: number,
+  steerDeg: number
+) => frontTireSaturationLevel([
+  {
+    gripUtilization,
+    slipAngleRad: slipDeg * DEG_RAD,
+    steerAngleRad: steerDeg * DEG_RAD,
+  },
+  {
+    gripUtilization,
+    slipAngleRad: -slipDeg * DEG_RAD,
+    steerAngleRad: -steerDeg * DEG_RAD,
+  },
+]);
+
+assert.equal(
+  frontTireSaturationState(saturation(0.99, 0.5, 0)),
+  'none',
+  'straight-line high grip utilization must not falsely report front corner saturation'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.60, 3.0, 3.0)),
+  'none',
+  'ordinary low-slip cornering must stay quiet'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.70, 6.5, 4.0)),
+  'approaching',
+  'front slip approaching the peak must provide a subtle warning'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.80, 8.5, 5.0)),
+  'at-limit',
+  'front slip at the calibrated peak boundary must show the at-limit cue'
+);
+assert.equal(
+  frontTireSaturationState(saturation(0.99, 2.0, 3.0)),
+  'at-limit',
+  'near-envelope front utilization while steering must show the at-limit cue'
+);
+
+const leftCue = frontTireSaturationLevel([
+  { gripUtilization: 0.88, slipAngleRad: 7 * DEG_RAD, steerAngleRad: 5 * DEG_RAD },
+  { gripUtilization: 0.82, slipAngleRad: 6 * DEG_RAD, steerAngleRad: 4 * DEG_RAD },
+]);
+const rightCue = frontTireSaturationLevel([
+  { gripUtilization: 0.82, slipAngleRad: -6 * DEG_RAD, steerAngleRad: -4 * DEG_RAD },
+  { gripUtilization: 0.88, slipAngleRad: -7 * DEG_RAD, steerAngleRad: -5 * DEG_RAD },
+]);
+assert.equal(leftCue, rightCue, 'front saturation cue must mirror left/right exactly');
 
 console.log('MobileControlsTests: PASS');
