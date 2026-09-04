@@ -7,3 +7,4 @@ pr-57|feature/mobile-analog-steering-wheel-final
 pr-78|fix/tire-grip-feel
 pr-94|fix/tire-feel-steering-ratio
 pr-120|fix/mobile-wheel-center-guard
+pr-121|handling-digital-driver-v3-max
