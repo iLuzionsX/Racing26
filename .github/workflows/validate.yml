@@ -44,6 +44,15 @@ jobs:
       - name: Physics convention guardrails
         run: npm run test:conventions
 
+      - name: High-speed steering input regression
+        run: npm run test:high-speed-steering
+
+      - name: High-speed spin regression
+        run: npm run test:high-speed-spin
+
+      - name: High-speed suspension and load regression
+        run: npm run test:high-speed
+
       - name: Mobile controls regression
         run: npm run test:mobile
 
