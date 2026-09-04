@@ -59,6 +59,7 @@ interface ControlsOverlayProps {
   activeKeys: { [key: string]: boolean };
   onTouchInput: (action: 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake', active: boolean) => void;
   onTouchSteer: (value: number, active: boolean) => void;
+  frontSaturationLevel?: number;
   isAutomatic: boolean;
   onSetAutomatic: (automatic: boolean) => void;
   steeringInputMode: SteeringInputMode;
@@ -102,6 +103,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   activeKeys,
   onTouchInput,
   onTouchSteer,
+  frontSaturationLevel = 0,
   isAutomatic,
   onSetAutomatic,
   steeringInputMode,
@@ -661,6 +663,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           onTouchInput={onTouchInput}
           onTouchSteer={onTouchSteer}
           steeringRotationDeg={mobileSteeringRotationDeg}
+          frontSaturationLevel={frontSaturationLevel}
           onNextCamera={onNextCamera}
           onReset={onReset}
         />
