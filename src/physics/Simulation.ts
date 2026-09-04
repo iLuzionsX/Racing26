@@ -146,6 +146,15 @@ export class Simulation {
       x: lerp(prev.x, curr.x, alpha),
       y: lerp(prev.y, curr.y, alpha),
       z: lerp(prev.z, curr.z, alpha),
+      // CarRenderer places the sprung root from elevationHeight on graded
+      // showcase. Leaving it at curr while x/z/heave are smoothed steps Y at
+      // 120 Hz. Visual-only interpolation matching x/z/heave; physics stepping
+      // uses vehicle.step directly and is unchanged.
+      elevationHeight: lerp(
+        Number.isFinite((prev as any).elevationHeight) ? (prev as any).elevationHeight : (curr as any).elevationHeight,
+        Number.isFinite((curr as any).elevationHeight) ? (curr as any).elevationHeight : (prev as any).elevationHeight,
+        alpha
+      ),
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
