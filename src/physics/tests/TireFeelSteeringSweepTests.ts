@@ -166,6 +166,15 @@ const mirrors = SPEEDS_KMH.map((speedKmh) => {
     Math.max(0.25, (Math.abs(left.tailYawDegS) + Math.abs(right.tailYawDegS)) * 0.5);
   assert(slipAsym < 0.08, `${speedKmh}km/h 60deg hand input front-slip mirror failed: ${(slipAsym * 100).toFixed(1)}%`);
   assert(yawAsym < 0.08, `${speedKmh}km/h 60deg hand input yaw mirror failed: ${(yawAsym * 100).toFixed(1)}%`);
+
+  // Player-facing regression: an ordinary 60-degree hand-wheel input must stay
+  // inside the M5 tire's useful pre/post-peak boundary across the core road-speed
+  // range. Full rack is still reachable with more steering travel.
+  assert(
+    left.peakFrontSlipDeg < 8.0 && right.peakFrontSlipDeg < 8.0,
+    `${speedKmh}km/h 60deg hand input over-commanded front tires: L=${left.peakFrontSlipDeg.toFixed(2)}deg R=${right.peakFrontSlipDeg.toFixed(2)}deg`
+  );
+
   return { speedKmh, left, right, slipAsym, yawAsym };
 });
 
