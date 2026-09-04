@@ -252,7 +252,11 @@ const heldDigital = runCorner(
   'held-digital-left',
   (sim) => {
     const speedMs = Math.abs(sim.vehicle.rigidBody.getLocalVelocity().z);
-    digitalInput = updateDigitalSteeringInput(digitalInput, 1, speedMs, DT);
+    digitalInput = updateDigitalSteeringInput(digitalInput, 1, speedMs, DT, {
+      wheelbaseM: config.wheelbase,
+      maxSteerAngleRad: config.maxSteerAngle,
+      forwardSpeedMs: sim.vehicle.rigidBody.getLocalVelocity().z,
+    });
     return digitalInput;
   },
   2.0
@@ -272,7 +276,10 @@ assert(moderate.peakFrontSlipDeg < 9.0, `moderate corner gross-slid front tires:
 assert(moderate.frontSkidSamples === 0, `moderate corner emitted front skid state for ${moderate.frontSkidSamples} samples`);
 assert(moderate.meanYawResponseRatio > 0.62, `moderate corner yaw response too low: ${moderate.meanYawResponseRatio.toFixed(3)}`);
 assert(moderate.peakRearSlipDeg < 9.0, `moderate corner gross-slid rear tires: ${moderate.peakRearSlipDeg.toFixed(2)} deg`);
-assert(heldDigital.peakSteerInput > 0.99, `held digital steering must preserve full authority, got ${heldDigital.peakSteerInput.toFixed(3)}`);
+assert(
+  heldDigital.peakSteerInput > 0.65 && heldDigital.peakSteerInput < 0.99,
+  `30 km/h held digital steering should use the road-speed envelope instead of full lock, got ${heldDigital.peakSteerInput.toFixed(3)}`
+);
 assert(heldDigital.peakFrontSlipDeg < 30, `held full steering became numerically unstable: ${heldDigital.peakFrontSlipDeg.toFixed(2)} deg`);
 assert(heldDigital.meanYawResponseRatio > 0.55, `held full steering lost plausible yaw response: ${heldDigital.meanYawResponseRatio.toFixed(3)}`);
 assert(heldDigital.finalSpeedKmh > 15, `held full steering scrubbed implausibly much speed: ${heldDigital.finalSpeedKmh.toFixed(1)} km/h`);
