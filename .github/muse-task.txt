@@ -1,1 +1,84 @@
-Perform a scoped audit of the current 2025 BMW M5 driving lab after migration to iLuzionsX/Racing26. Focus on low-speed steering/braking stability and obvious physics regressions. Preserve AGENTS.md, PHYSICS_CONVENTIONS.md, and M5_VALIDATION.md as hard constraints. Do not change code unless there is a clear, evidence-based defect. If you propose a patch, keep it small, include deterministic regression coverage, and require npm run test:m5-validation:strict for any change that can affect overall M5 behavior.
+ACT AS LEAD ENVIRONMENT-ART INTEGRATOR AND QA ENGINEER for iLuzionsX/Racing26 Showcase Circuit.
+
+GOAL: ship a visibly richer, premium authored racing venue using the many Muse specialist modules already staged on this branch, while preserving the quantitatively validated track and BMW M5 physics. This is the final integration pass, not another concept brainstorm.
+
+HARD LOCKS — DO NOT CHANGE:
+- track control points / ShowcaseTrackPath geometry
+- bankingAt()
+- TRACK_WIDTH_M=20, CURB_WIDTH_M=1.25, RUNOFF_WIDTH_M=18
+- SurfaceProvider friction/elevation behavior
+- showcase spawn / reset semantics
+- any vehicle physics/tuning/equations
+- AGENTS.md, PHYSICS_CONVENTIONS.md, M5_VALIDATION.md
+Existing track QA baseline must remain 11 PASS / 0 WARN / 0 FAIL.
+
+AVAILABLE TOOLKIT ON THIS BRANCH:
+- trackPerformance.ts: maxDrawCalls 60, maxTriangles 350k, texture <=256 px, one shadow map, static/instanced/disposal helpers.
+- fictionalBranding.ts + tracksideProps.ts: deterministic fictional motorsport signage/boards/marshal/camera/service clusters outside barriers.
+- showcaseSurfaceMaterials.ts + showcaseRoadDetails.ts: visual-only surface materials and paint/rubber/seam/grate detail.
+- kenneyAssetManifest.ts + kenneyVenueAssets.ts: real CC0 Kenney Racing Kit GLB loader + deterministic venue specs. It explicitly forbids Kenney road/track meshes.
+- crowd.ts: cheap instanced crowd people.
+- showcaseLighting.ts + showcaseAtmosphere.ts + showcasePracticalLighting.ts: daylight lighting/sky/haze/practicals. NOTE: practical module exports createShowcaseVenue despite filename. Rename export if useful.
+- THIRD_PARTY_ASSETS.txt provenance exists.
+
+VISUAL QA FINDINGS TO FIX:
+1. scene still reads like procedural primitives: discontinuous barrier/curb visual rhythm, generic repeated boxes, one-band trees, uniform rocks/mountains.
+2. flat/untextured horizon/ground; weak near/mid/far depth.
+3. some old boards/rocks/tower use simplistic Y placement and can read floating vs banked terrain.
+4. pit/paddock and grandstand identity is weak; start/finish should feel like a real event venue.
+5. dead zones between landmarks; need intentional visual rhythm rather than random scatter.
+6. number boards must be high-contrast/readable on phone; avoid tiny text.
+7. no visual clutter inside the 18m runoff/recovery corridor.
+8. preserve clear road readability and daylight contrast.
+
+ART DIRECTION:
+- fictional high-budget alpine/mountain GP, modern concrete + dark steel + glass + timber + restrained cyan/red accents
+- authored start/finish event district: real Kenney pit garage/office assets, 2-3 real grandstand assets, tents, light posts, cameras, flags, billboard, parked display race cars
+- use real CC0 Kenney GLBs to REPLACE/supersede basic procedural pit/stand props, not duplicate them
+- a memorable non-driving landmark around u~0.42-0.45 (outside barrier by a large margin), built procedurally if needed
+- layered terrain: rock-cut sector, retaining slope/wall language, near/mid/far vegetation bands, bushes/grass, distant ridgelines; all deterministic and outside recovery zone
+- richer road visual material: asphalt aggregate/rubbering, seams/patches, grid boxes, arrows, drainage/edge wear; VISUAL ONLY
+- race-day life: modest instanced crowds concentrated at start/finish and 2 signature corners. Do NOT use first-wave 80-110 extra draw-call design. Target total draw calls <=60-ish; crowd should add only a few instanced draws.
+- fictional sponsor clusters / timing / braking markers used selectively, not every 20m.
+- lighting: single shadow-casting sun + hemi; no shadow-casting point-light swarm. Atmosphere must keep road/braking markers readable.
+
+REAL ASSET REQUIREMENTS:
+- keep Kenney runtime loader graceful: remote GLB failure must never prevent driving.
+- no Kenney road*.glb or track meshes under any circumstance.
+- prefer these existing allowed assets: grandStandCovered, grandStandCoveredRound, pitsGarage, pitsOffice, fenceStraight, billboard, camera_exclusive, tentLong, lightPostModern, flagCheckersSmall, radarEquipment, raceCarGreen, raceCarOrange.
+- asset enrichment can be async after immediate procedural circuit group exists.
+- cleanup/dispose must be safe on Plane <-> Showcase switching.
+- avoid loading dozens of duplicate assets; cache and clone.
+
+IMPLEMENTATION:
+- You MAY edit src/graphics/tracks/showcaseCircuit.ts now, but only integration/rendering portions — locked geometry/constants/functions above must remain byte-for-byte behaviorally equivalent.
+- You MAY edit the staged art modules to fix imports/API issues and reduce draw calls.
+- You MAY create new files under src/graphics/tracks/showcase/ such as showcaseArtDirection.ts, terrainComposition.ts, venueArchitecture.ts, visualQA.ts.
+- Avoid editing App.tsx unless strictly necessary for async asset lifecycle; prefer keeping runtime inside createShowcaseCircuit.
+- Replace/remove the old simplistic pit boxes/grandstand rows/cones/mountain spam where the new art supersedes them.
+- Keep fallback procedural venue sufficient if remote assets fail.
+
+ADD A BLOCKING VISUAL QA TEST:
+Create src/graphics/tracks/showcase/showcaseVisualQA.ts (and package script if needed) that can run headless and checks at minimum:
+- Kenney manifest contains zero forbidden road/track assets.
+- all declared venue specs clear OUTER_RUNOFF_M and BARRIER_OFFSET_M.
+- deterministic specs/counts for fixed input.
+- visual builder placement definitions never enter recovery zone.
+- texture dimension budget constants <=256.
+- declared art/render budget <= trackPerformance budget.
+- no more than a sane number of Kenney asset instances/specs (prevent accidental content explosion).
+- art test must not require network/DOM/WebGL.
+Wire it into .github/workflows/validate.yml and pages.yml before M5 validation.
+
+TESTS REQUIRED BEFORE PROPOSING PATCH COMPLETE:
+npm run test:track
+npm run test:visual-track (or chosen name)
+npm run test:conventions
+npm run test:low-speed-brake
+npm run test:cornering
+npm run test:suspension
+npm run test:tire
+npm run test:m5-validation:strict
+npm run build -- --base=/Racing26/
+
+Patch should be coherent and production-ready. If a staged module is too heavy or flawed, simplify it rather than blindly enabling it. Return a standard unified diff.
