@@ -149,6 +149,15 @@ export class Simulation {
       yaw: prev.yaw + yawDiff * alpha,
       pitch: lerp(prev.pitch, curr.pitch, alpha),
       roll: lerp(prev.roll, curr.roll, alpha),
+      // Showcase elevation changes every fixed step on grade. Leaving it at
+      // curr reintroduces a 120 Hz vertical stair-step into the renderer
+      // (root Y and wheel-relative Y both use elevationHeight) even though
+      // x/z/heave/hub are interpolated. Use same alpha; physics state untouched.
+      elevationHeight: lerp(
+        (prev as any).elevationHeight ?? (curr as any).elevationHeight,
+        (curr as any).elevationHeight ?? (prev as any).elevationHeight,
+        alpha
+      ),
       // CarRenderer positions the sprung body from road-relative heave rather than
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
