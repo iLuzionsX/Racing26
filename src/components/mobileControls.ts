@@ -67,3 +67,16 @@ export function mobileWheelSteerToRotationDeg(steer: number): number {
   if (!Number.isFinite(steer)) return 0;
   return -Math.max(-1, Math.min(1, steer)) * MOBILE_STEERING_WHEEL_MAX_DEG;
 }
+
+/**
+ * Incremental angular update avoids the atan2 seam: moving from +179° to -179°
+ * is a +2° continuation, not a full-lock reversal.
+ */
+export function advanceMobileWheelRotationDeg(
+  rotationDeg: number,
+  previousPointerAngleDeg: number,
+  pointerAngleDeg: number
+): number {
+  const deltaDeg = wrapAngleDeg(pointerAngleDeg - previousPointerAngleDeg);
+  return clampMobileWheelRotationDeg(rotationDeg + deltaDeg);
+}
