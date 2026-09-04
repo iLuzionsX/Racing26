@@ -198,23 +198,23 @@ html[data-driving-mobile='true'] #mobile-quick-actions {
   }
 
   html[data-driving-mobile='true'] #mobile-steering-wheel {
-    width: 7.15rem;
-    height: 7.15rem;
+    width: min(7.15rem, 30vw);
+    height: min(7.15rem, 30vw);
     padding: 0.36rem;
   }
 
   html[data-driving-mobile='true'] .mobile-handbrake {
-    width: 3.35rem !important;
-    height: 3.35rem !important;
+    width: min(3.35rem, 22vw) !important;
+    height: min(3.35rem, 22vw) !important;
   }
 
   html[data-driving-mobile='true'] .mobile-brake {
-    width: 3.75rem !important;
+    width: min(3.75rem, 24vw) !important;
     height: 5.25rem !important;
   }
 
   html[data-driving-mobile='true'] .mobile-throttle {
-    width: 3.9rem !important;
+    width: min(3.9rem, 25vw) !important;
     height: 5.9rem !important;
   }
 
@@ -224,7 +224,14 @@ html[data-driving-mobile='true'] #mobile-quick-actions {
   }
 
   html[data-driving-mobile='true'] #mobile-quick-actions {
-    bottom: 6.4rem;
+    bottom: calc(6.9rem + env(safe-area-inset-bottom));
     margin-bottom: 0 !important;
+  }
+}
+
+@media (min-width: 700px) {
+  html[data-driving-mobile='true'] #mobile-driving-controls {
+    max-width: 52rem;
+    margin-inline: auto;
   }
 }

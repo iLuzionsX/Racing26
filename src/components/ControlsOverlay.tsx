@@ -441,17 +441,17 @@ const MobileDrivingControls: React.FC<{
       id="mobile-driving-controls"
       className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-end justify-between gap-3"
       style={{
-        paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
-        paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
-        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
       }}
     >
-      <div id="mobile-steering-pad" className="pointer-events-auto flex flex-col items-start gap-1.5">
+      <div id="mobile-steering-pad" className="pointer-events-auto flex min-w-0 flex-col items-start gap-1.5">
         <span className="pl-1 text-[8px] font-black uppercase tracking-[0.2em] text-slate-300/90">Steer</span>
         <MobileSteeringWheel onSteerChange={onTouchSteer} />
       </div>
 
-      <div id="mobile-quick-actions" className="pointer-events-auto absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-1.5" style={{ marginBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+      <div id="mobile-quick-actions" className="pointer-events-auto absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-1.5" style={{ marginBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <button
           type="button"
           onClick={onNextCamera}
@@ -470,7 +470,7 @@ const MobileDrivingControls: React.FC<{
         </button>
       </div>
 
-      <div id="mobile-pedal-pad" className="pointer-events-auto flex items-end gap-2">
+      <div id="mobile-pedal-pad" className="pointer-events-auto flex min-w-0 items-end gap-2">
         <MobileTouchButton
           label="HB"
           ariaLabel="Handbrake"
