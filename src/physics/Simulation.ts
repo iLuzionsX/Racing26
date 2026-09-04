@@ -153,6 +153,11 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // Root visual Y comes from elevationHeight (track elevation), not raw y.
+      // Leaving it at curr bypasses all interpolation above and reintroduces
+      // 120 Hz stepping on graded track: hub.y is interpolated while
+      // hub.y - elevationHeight is not. Render-only; physics state untouched.
+      elevationHeight: lerp(prev.elevationHeight, curr.elevationHeight, alpha),
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
