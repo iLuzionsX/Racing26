@@ -150,6 +150,8 @@ export class Vehicle {
     // 4. Differential
     this.differential = new DifferentialSystem({
       type: this.config.differentialType,
+      frontType: (this.config as any).frontDifferentialType,
+      rearType: (this.config as any).rearDifferentialType,
       powerRamp: this.config.diffPowerRamp,
       coastRamp: this.config.diffCoastRamp,
       preloadTorque: this.config.diffPreloadTorque,
@@ -241,6 +243,8 @@ export class Vehicle {
 
     this.differential.config = {
       type: newConfig.differentialType,
+      frontType: (newConfig as any).frontDifferentialType,
+      rearType: (newConfig as any).rearDifferentialType,
       powerRamp: newConfig.diffPowerRamp,
       coastRamp: newConfig.diffCoastRamp,
       preloadTorque: newConfig.diffPreloadTorque,
