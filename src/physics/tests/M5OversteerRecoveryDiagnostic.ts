@@ -13,6 +13,24 @@ const sideslipDeg = (sim: Simulation) => {
   const v = sim.vehicle.rigidBody.getLocalVelocity();
   return Math.atan2(v.x, Math.max(0.1, Math.abs(v.z))) * DEG;
 };
+const digitalRecoveryState = (sim: Simulation) => {
+  const localV = sim.vehicle.rigidBody.getLocalVelocity();
+  const localW = sim.vehicle.rigidBody.getLocalAngularVelocity();
+  const speedMs = Math.hypot(localV.x, localV.z);
+  return {
+    speedMs,
+    context: {
+      wheelbaseM: sim.vehicle.config.wheelbase,
+      maxSteerAngleRad: sim.vehicle.config.maxSteerAngle,
+      yawRateRadS: localW.y,
+      sideslipRad:
+        speedMs > 0.5
+          ? Math.atan2(localV.x, Math.max(0.5, Math.abs(localV.z)))
+          : 0,
+      forwardSpeedMs: localV.z,
+    },
+  };
+};
 function sample(sim: Simulation, t: number, driverInput: number) {
   const s = sim.vehicle.getState();
   const avg = (a: number, b: number) => (a + b) * 0.5;
@@ -110,7 +128,14 @@ function runDigitalDriverRecovery() {
     const yawDegS = stateBefore.yawRate * DEG;
     if (!released && yawDegS <= 8) { released = true; releaseTimeSec = i * dt; }
     const direction: -1 | 0 = released ? 0 : -1;
-    digitalInput = updateDigitalSteeringInput(digitalInput, direction, stateBefore.speedMs, dt);
+    const recoveryState = digitalRecoveryState(sim);
+    digitalInput = updateDigitalSteeringInput(
+      digitalInput,
+      direction,
+      recoveryState.speedMs,
+      dt,
+      recoveryState.context
+    );
     peakCounterInput = Math.max(peakCounterInput, -digitalInput);
     const state = sim.stepExplicit({ ...neutral, steer: digitalInput }, 1);
     peakCounterSteerDeg = Math.max(peakCounterSteerDeg, -state.actualSteerAngle * DEG);
