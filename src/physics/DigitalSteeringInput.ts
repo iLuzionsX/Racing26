@@ -158,7 +158,8 @@ export function updateDigitalSteeringInput(
   context: DigitalSteeringContext = {}
 ): number {
   const current = PhysicsMath.clamp(finiteOr(currentInput, 0), -1, 1);
-  if (dt <= 0) return current;
+  // Numeric safety: non-finite dt must hold instead of producing NaN via NaN*rate.
+  if (!Number.isFinite(dt) || dt <= 0) return current;
 
   const target = digitalSteeringTarget(direction, speedMs, context);
   const recoveryBlend = digitalCountersteerRecoveryBlend(direction, speedMs, context);

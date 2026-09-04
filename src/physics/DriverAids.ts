@@ -80,10 +80,20 @@ export class DriverAidsSystem {
 
     // Canonical vehicle coordinates are right-handed: +X is vehicle-left, +Y is up, +Z is forward.
     // UI/control convention: positive steer means LEFT, negative steer means RIGHT.
-    const targetCenterAngle = steerInput * maxAllowedAngle;
+    // Numeric safety: non-finite driver input must hold the rack instead of poisoning
+    // persistent steering state. Finite inputs follow the identical path as before.
+    const safeSteerInput = Number.isFinite(steerInput) ? steerInput : 0;
+    if (!Number.isFinite(this.currentCenterSteerAngle)) this.currentCenterSteerAngle = 0;
+    const targetCenterAngle = safeSteerInput * maxAllowedAngle;
 
-    const steerStep = this.config.steerSpeed * dt;
-    if (Math.abs(targetCenterAngle - this.currentCenterSteerAngle) <= steerStep) {
+    let steerStep = 0;
+    if (Number.isFinite(dt) && dt > 0) {
+      const candidateStep = this.config.steerSpeed * dt;
+      if (Number.isFinite(candidateStep) && candidateStep >= 0) steerStep = candidateStep;
+    }
+    if (!Number.isFinite(targetCenterAngle)) {
+      // Hold current rack; Ackermann below uses the held center angle.
+    } else if (Math.abs(targetCenterAngle - this.currentCenterSteerAngle) <= steerStep) {
       this.currentCenterSteerAngle = targetCenterAngle;
     } else {
       this.currentCenterSteerAngle += Math.sign(targetCenterAngle - this.currentCenterSteerAngle) * steerStep;
