@@ -153,6 +153,12 @@ export class Simulation {
       // raw world Y. Interpolate it too; otherwise the chassis visibly snaps at the
       // 120 Hz physics cadence even while x/y/z and pitch/roll are smoothed.
       heave: lerp(prev.heave, curr.heave, alpha),
+      // CarRenderer places the whole rig at elevationHeight while XZ/heave/hubs
+      // are interpolated. Leaving elevationHeight stepped reintroduces 120 Hz
+      // vertical judder on graded/banked showcase sections and defeats hub interp.
+      elevationHeight: Number.isFinite(prev.elevationHeight) && Number.isFinite(curr.elevationHeight)
+        ? lerp(prev.elevationHeight, curr.elevationHeight, alpha)
+        : curr.elevationHeight,
       speedMs: lerp(prev.speedMs, curr.speedMs, alpha),
       speedKmh: lerp(prev.speedKmh, curr.speedKmh, alpha),
       speedMph: lerp(prev.speedMph, curr.speedMph, alpha),
