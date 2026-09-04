@@ -63,10 +63,6 @@ export const BMW_M5_2025_OVERRIDES: Partial<VehicleConfig> & Record<string, any>
   tireLongitudinalStiffnessB: 15.0,
   tireLateralStiffnessB: 13.5,
   tireLoadSensitivity: 0.000030,
-  // Outside/inside corners start from their measured static axle loads rather
-  // than learning a reference during the first few seconds of driving.
-  tireReferenceLoadFrontN: 6367,
-  tireReferenceLoadRearN: 5316,
   // Keep peak mu unchanged; retain slightly more force once the tire is clearly
   // past the peak so recovery is progressive instead of an abrupt ice-like drop.
   slideFrictionMultiplier: 0.86,
