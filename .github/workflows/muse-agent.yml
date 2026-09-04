@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - 'muse-fanout-*'
     paths:
       - .github/muse-task.txt
   pull_request:
@@ -81,7 +82,9 @@ jobs:
           const fs = require('node:fs');
           const path = '/tmp/muse.patch';
           let patch = fs.readFileSync(path, 'utf8');
-          patch = patch.replace(/^ (?=(?:diff --git |--- |\+\+\+ |@@ ))/gm, '');
+          patch = patch.replace(/^ (?=(?:diff --git |index |--- |\+\+\+ |@@ ))/gm, '');
+          patch = patch.replace(/^(---|\+\+\+) dev\/null$/gm, '$1 /dev/null');
+          patch = patch.replace(/^(---|\+\+\+) \/?dev\/null$/gm, '$1 /dev/null');
           fs.writeFileSync(path, patch);
           NODE
 
