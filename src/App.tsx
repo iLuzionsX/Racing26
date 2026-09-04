@@ -118,6 +118,8 @@ export default function App() {
   const keysDownRef = useRef<{ [code: string]: boolean }>({});
   const digitalSteerInputRef = useRef(0);
   const mouseSteerInputRef = useRef(0);
+  const touchSteerInputRef = useRef(0);
+  const touchSteerActiveRef = useRef(false);
   const steeringInputModeRef = useRef<SteeringInputMode>(steeringInputMode);
   const drivingEnvironmentRef = useRef<DrivingEnvironment>('plane');
   const isStartMenuOpenRef = useRef(true);
@@ -162,6 +164,8 @@ export default function App() {
 
     digitalSteerInputRef.current = 0;
     mouseSteerInputRef.current = 0;
+    touchSteerInputRef.current = 0;
+    touchSteerActiveRef.current = false;
     envManagerRef.current?.resetCones();
   };
 
@@ -229,6 +233,8 @@ export default function App() {
         setActiveKeys({});
         digitalSteerInputRef.current = 0;
         mouseSteerInputRef.current = 0;
+        touchSteerInputRef.current = 0;
+        touchSteerActiveRef.current = false;
         touchInputsRef.current.throttle = false;
         touchInputsRef.current.brake = false;
         touchInputsRef.current.steerLeft = false;
@@ -326,9 +332,17 @@ export default function App() {
       const throttleInput = isThrottle ? 1.0 : 0;
       const brakeInput = isBrake ? 1.0 : 0;
       const touchSteeringActive = touches.steerLeft || touches.steerRight;
+      const touchAnalogSteeringActive = touchSteerActiveRef.current && !inputBlocked;
       let steerInput: number;
 
-      if (steeringInputModeRef.current === 'mouse' && !touchSteeringActive && !inputBlocked) {
+      if (touchAnalogSteeringActive) {
+        // The on-screen wheel is a true analog rack command, like mouse steering:
+        // the player chooses the steering fraction directly instead of holding a
+        // binary full-lock button. Keep the full mechanical rack available.
+        physicsEngine.simulation.vehicle.driverAids.config.steerSpeedReduction = 0;
+        digitalSteerInputRef.current = 0;
+        steerInput = touchSteerInputRef.current;
+      } else if (steeringInputModeRef.current === 'mouse' && !touchSteeringActive && !inputBlocked) {
         // Mouse/wheel-style analog input represents a fraction of the physical
         // steering rack. BMW's speed sensitivity changes assistance/ratio, not
         // the mechanical lock, so bypass the keyboard-only road-speed angle cap.
@@ -543,6 +557,20 @@ export default function App() {
     touchInputsRef.current[action] = active;
   };
 
+  const handleTouchSteer = (value: number, active: boolean) => {
+    if (isStartMenuOpenRef.current) return;
+    globalAudio.init();
+    const safeValue = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+    touchSteerInputRef.current = active ? safeValue : 0;
+    touchSteerActiveRef.current = active;
+    if (active) {
+      // A fresh wheel grab owns steering immediately and must not inherit stale
+      // digital or mouse state from another input source.
+      digitalSteerInputRef.current = 0;
+      mouseSteerInputRef.current = 0;
+    }
+  };
+
   const handleSetSteeringInputMode = (mode: SteeringInputMode) => {
     steeringInputModeRef.current = mode;
     setSteeringInputMode(mode);
@@ -695,6 +723,7 @@ export default function App() {
         onSelectPreset={handleSelectPreset}
         activeKeys={activeKeys}
         onTouchInput={handleTouchInput}
+        onTouchSteer={handleTouchSteer}
         isAutomatic={vehicleTelemetry.isAutomatic}
         onSetAutomatic={(automatic) => {
           if (physicsEngineRef.current) {
