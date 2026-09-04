@@ -50,7 +50,7 @@ assert(Math.abs(parkingRight + 1) < 1e-12, '6 km/h right hold must reach full pa
 
 // Normal road-speed steering is a sustained soft envelope, not merely a slower
 // journey to full parking-lot lock.
-for (const speedKmh of [40, 70, 100, 120]) {
+for (const speedKmh of [30, 35, 40, 70, 100, 120]) {
   const left = hold(1, speedKmh, 2.0);
   const right = hold(-1, speedKmh, 2.0);
   const expectedLimit = digitalSteeringLimitForSpeed(speedKmh / 3.6, {
@@ -63,7 +63,7 @@ for (const speedKmh of [40, 70, 100, 120]) {
   assert(Math.abs(left + right) < 1e-12, `${speedKmh} km/h left/right must mirror exactly`);
   assert(Math.abs(left) < 0.8, `${speedKmh} km/h normal steering must not approach parking lock`);
 
-  if (speedKmh >= 70) {
+  if (speedKmh >= 30) {
     assert(
       impliedLateralG(speedKmh, left) <= 0.90,
       `${speedKmh} km/h envelope should stay near/below the 0.88g design target, got ${impliedLateralG(speedKmh, left).toFixed(3)}g`
@@ -71,11 +71,16 @@ for (const speedKmh of [40, 70, 100, 120]) {
   }
 }
 
+const limit30 = digitalSteeringLimitForSpeed(30 / 3.6, BASE_CONTEXT);
+const limit35 = digitalSteeringLimitForSpeed(35 / 3.6, BASE_CONTEXT);
 const limit40 = digitalSteeringLimitForSpeed(40 / 3.6, BASE_CONTEXT);
 const limit70 = digitalSteeringLimitForSpeed(70 / 3.6, BASE_CONTEXT);
 const limit100 = digitalSteeringLimitForSpeed(100 / 3.6, BASE_CONTEXT);
 const limit120 = digitalSteeringLimitForSpeed(120 / 3.6, BASE_CONTEXT);
-assert(limit40 > limit70 && limit70 > limit100 && limit100 > limit120, 'road-speed envelope must tighten monotonically');
+assert(
+  limit30 > limit35 && limit35 > limit40 && limit40 > limit70 && limit70 > limit100 && limit100 > limit120,
+  'road-speed envelope must tighten monotonically'
+);
 
 // High-speed taps remain responsive, but cannot inject a huge tire-saturating
 // steering command in one frame or one short key press.
