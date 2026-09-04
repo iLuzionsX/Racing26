@@ -1,6 +1,9 @@
 import React from 'react';
 import {
+  MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
   advanceMobileWheelRotationDeg,
+  clampMobileWheelRotationDeg,
+  mobileWheelMaxRotationDeg,
   mobileWheelPointerAngleDeg,
   mobileWheelRotationToSteer,
 } from './mobileControls';
@@ -8,7 +11,12 @@ import {
 export const MobileSteeringWheel: React.FC<{
   onSteerChange: (value: number, active: boolean) => void;
   interactionEnabled?: boolean;
-}> = ({ onSteerChange, interactionEnabled = true }) => {
+  steeringRotationDeg?: number;
+}> = ({
+  onSteerChange,
+  interactionEnabled = true,
+  steeringRotationDeg = MOBILE_STEERING_WHEEL_DEFAULT_ROTATION_DEG,
+}) => {
   const [rotationDeg, setRotationDeg] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
   const pointerRef = React.useRef<{ id: number; lastPointerAngleDeg: number } | null>(null);
@@ -20,10 +28,14 @@ export const MobileSteeringWheel: React.FC<{
   }, [onSteerChange]);
 
   const reportRotation = React.useCallback((nextRotationDeg: number, active: boolean) => {
-    rotationRef.current = nextRotationDeg;
-    setRotationDeg(nextRotationDeg);
-    onSteerChangeRef.current(mobileWheelRotationToSteer(nextRotationDeg), active);
-  }, []);
+    const clamped = clampMobileWheelRotationDeg(nextRotationDeg, steeringRotationDeg);
+    rotationRef.current = clamped;
+    setRotationDeg(clamped);
+    onSteerChangeRef.current(
+      mobileWheelRotationToSteer(clamped, steeringRotationDeg),
+      active
+    );
+  }, [steeringRotationDeg]);
 
   const release = React.useCallback(() => {
     pointerRef.current = null;
@@ -34,6 +46,18 @@ export const MobileSteeringWheel: React.FC<{
   React.useEffect(() => {
     if (!interactionEnabled) release();
   }, [interactionEnabled, release]);
+
+  React.useEffect(() => {
+    const clamped = clampMobileWheelRotationDeg(rotationRef.current, steeringRotationDeg);
+    if (clamped !== rotationRef.current) {
+      reportRotation(clamped, dragging);
+    } else if (dragging) {
+      onSteerChangeRef.current(
+        mobileWheelRotationToSteer(clamped, steeringRotationDeg),
+        true
+      );
+    }
+  }, [steeringRotationDeg, dragging, reportRotation]);
 
   React.useEffect(() => {
     const onBlur = () => release();
@@ -73,7 +97,9 @@ export const MobileSteeringWheel: React.FC<{
       aria-label="Steering wheel"
       aria-valuemin={-1}
       aria-valuemax={1}
-      aria-valuenow={Number(mobileWheelRotationToSteer(rotationDeg).toFixed(3))}
+      aria-valuenow={Number(
+        mobileWheelRotationToSteer(rotationDeg, steeringRotationDeg).toFixed(3)
+      )}
       onPointerDown={(event) => {
         if (!interactionEnabled) return;
         event.preventDefault();
@@ -85,7 +111,10 @@ export const MobileSteeringWheel: React.FC<{
         };
         setDragging(true);
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        onSteerChangeRef.current(mobileWheelRotationToSteer(rotationRef.current), true);
+        onSteerChangeRef.current(
+          mobileWheelRotationToSteer(rotationRef.current, steeringRotationDeg),
+          true
+        );
       }}
       onPointerMove={(event) => {
         if (!interactionEnabled) return;
@@ -96,7 +125,8 @@ export const MobileSteeringWheel: React.FC<{
         const nextRotationDeg = advanceMobileWheelRotationDeg(
           rotationRef.current,
           pointer.lastPointerAngleDeg,
-          pointerAngleDeg
+          pointerAngleDeg,
+          steeringRotationDeg
         );
         pointer.lastPointerAngleDeg = pointerAngleDeg;
         reportRotation(nextRotationDeg, true);
@@ -126,13 +156,13 @@ export const MobileSteeringWheel: React.FC<{
       onKeyDown={(event) => {
         if (!interactionEnabled) return;
         let next = rotationRef.current;
-        if (event.key === 'ArrowLeft') next -= 13.5;
-        else if (event.key === 'ArrowRight') next += 13.5;
+        const keyboardStepDeg = mobileWheelMaxRotationDeg(steeringRotationDeg) / 10;
+        if (event.key === 'ArrowLeft') next -= keyboardStepDeg;
+        else if (event.key === 'ArrowRight') next += keyboardStepDeg;
         else if (event.key === 'Home' || event.key === '0') next = 0;
         else return;
         event.preventDefault();
-        const clamped = Math.max(-135, Math.min(135, next));
-        reportRotation(clamped, true);
+        reportRotation(next, true);
       }}
       onKeyUp={(event) => {
         if (!interactionEnabled) return;
