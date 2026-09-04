@@ -9,6 +9,7 @@ import { buildBrakingBoardFamily, buildFictionalBanner, buildMarshalPost, buildT
 import { buildCrowdCluster, makeSeededRandom, makeSeatedGrid } from './showcase/crowd';
 import { tryComposeKenneyVenueGroup } from './showcase/kenneyVenueAssets';
 import { buildTerrainComposition } from './showcase/terrainComposition';
+import { SHOWCASE_KENNEY_ASSET_IDS } from './showcase/showcaseArtBudget';
 
 export const TRACK_CENTER_X = 560;
 export const TRACK_WIDTH_M = 20;
@@ -674,21 +675,11 @@ export function createShowcaseCircuit(scene: THREE.Scene): ShowcaseCircuitRuntim
   group.add(createShowcaseAtmosphere(scene, TRACK_CENTER_X));
 
   let disposed = false;
-  const kenneyAssetIds = [
-    'grandStandCovered',
-    'grandStandCoveredRound',
-    'pitsGarage',
-    'pitsOffice',
-    'tentLong',
-    'raceCarGreen',
-    'raceCarOrange',
-  ] as const;
-
   void tryComposeKenneyVenueGroup({
     path: SHOWCASE_PATH,
     barrierOffsetM: BARRIER_OFFSET_M,
     outerRunoffM: OUTER_RUNOFF_M,
-    include: [...kenneyAssetIds],
+    include: [...SHOWCASE_KENNEY_ASSET_IDS],
   }).then((venueGroup) => {
     if (disposed) {
       disposeShowcaseGroup(venueGroup);
