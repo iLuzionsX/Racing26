@@ -44,6 +44,9 @@ jobs:
       - name: Physics convention guardrails
         run: npm run test:conventions
 
+      - name: Mobile controls regression
+        run: npm run test:mobile
+
       - name: Low-speed braking regression
         run: npm run test:low-speed-brake
 
