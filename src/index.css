@@ -44,6 +44,13 @@ html[data-driving-mobile='true'] #driving-simulator-app {
   overscroll-behavior: none;
 }
 
+html[data-driving-mobile='true'] {
+  --driving-safe-left: env(safe-area-inset-left, 0px);
+  --driving-safe-right: env(safe-area-inset-right, 0px);
+  --driving-safe-top: env(safe-area-inset-top, 0px);
+  --driving-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 html[data-driving-mobile='true'] #driving-simulator-app canvas {
   touch-action: none;
 }
@@ -117,9 +124,45 @@ html[data-driving-mobile='true'] #mobile-pedal-pad {
   filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.28));
 }
 
-/* Deliberate thumb-reach clearance beyond the device safe area. */
-html[data-driving-mobile='true'] #mobile-steering-pad {
-  margin-left: clamp(0.35rem, 1.25vw, 0.75rem);
+html[data-driving-mobile='true'] .mobile-control-cluster {
+  will-change: left, top, transform;
+}
+
+html[data-driving-mobile='true'] .mobile-control-cluster.is-layout-editing {
+  cursor: move;
+  outline: 2px dashed rgb(56 189 248 / 0.7);
+  outline-offset: 0.45rem;
+  border-radius: 1.5rem;
+  filter:
+    drop-shadow(0 10px 22px rgb(0 0 0 / 0.35))
+    drop-shadow(0 0 16px rgb(56 189 248 / 0.15));
+}
+
+html[data-driving-mobile='true'] .mobile-control-cluster.is-layout-editing::after {
+  content: 'DRAG';
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: -1.5rem;
+  transform: translateX(-50%);
+  border: 1px solid rgb(125 211 252 / 0.35);
+  border-radius: 9999px;
+  background: rgb(2 6 23 / 0.84);
+  padding: 0.16rem 0.42rem;
+  font-size: 0.42rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: rgb(186 230 253 / 0.95);
+  white-space: nowrap;
+}
+
+html[data-driving-mobile='true'] .mobile-control-cluster.is-layout-editing > * {
+  pointer-events: none;
+}
+
+html[data-driving-mobile='true'] #mobile-layout-edit-hint {
+  max-width: calc(100vw - 2rem);
+  text-align: center;
 }
 
 html[data-driving-mobile='true'] #mobile-steering-wheel {
@@ -175,10 +218,6 @@ html[data-driving-mobile='true'] #mobile-quick-actions {
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
-  html[data-driving-mobile='true'] #mobile-driving-controls {
-    padding-bottom: max(0.55rem, env(safe-area-inset-bottom)) !important;
-  }
-
   html[data-driving-mobile='true'] #mobile-steering-pad > span {
     display: none;
   }
