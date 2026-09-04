@@ -1,9 +1,8 @@
 import React from 'react';
 import {
-  mobileWheelGrabOffsetDeg,
+  advanceMobileWheelRotationDeg,
   mobileWheelPointerAngleDeg,
   mobileWheelRotationToSteer,
-  resolveMobileWheelRotationDeg,
 } from './mobileControls';
 
 export const MobileSteeringWheel: React.FC<{
@@ -11,15 +10,19 @@ export const MobileSteeringWheel: React.FC<{
 }> = ({ onSteerChange }) => {
   const [rotationDeg, setRotationDeg] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
-  const pointerRef = React.useRef<{ id: number; grabOffsetDeg: number } | null>(null);
+  const pointerRef = React.useRef<{ id: number; lastPointerAngleDeg: number } | null>(null);
   const rotationRef = React.useRef(0);
-  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const onSteerChangeRef = React.useRef(onSteerChange);
+
+  React.useEffect(() => {
+    onSteerChangeRef.current = onSteerChange;
+  }, [onSteerChange]);
 
   const reportRotation = React.useCallback((nextRotationDeg: number, active: boolean) => {
     rotationRef.current = nextRotationDeg;
     setRotationDeg(nextRotationDeg);
-    onSteerChange(mobileWheelRotationToSteer(nextRotationDeg), active);
-  }, [onSteerChange]);
+    onSteerChangeRef.current(mobileWheelRotationToSteer(nextRotationDeg), active);
+  }, []);
 
   const release = React.useCallback(() => {
     pointerRef.current = null;
@@ -41,9 +44,9 @@ export const MobileSteeringWheel: React.FC<{
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('orientationchange', onOrientation);
-      onSteerChange(0, false);
+      onSteerChangeRef.current(0, false);
     };
-  }, [onSteerChange, release]);
+  }, [release]);
 
   const pointerAngleForEvent = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -57,7 +60,6 @@ export const MobileSteeringWheel: React.FC<{
 
   return (
     <div
-      ref={rootRef}
       id="mobile-steering-wheel"
       className={`relative touch-none select-none rounded-full ${dragging ? 'is-dragging' : ''}`}
       role="slider"
@@ -72,21 +74,34 @@ export const MobileSteeringWheel: React.FC<{
         const pointerAngleDeg = pointerAngleForEvent(event);
         pointerRef.current = {
           id: event.pointerId,
-          grabOffsetDeg: mobileWheelGrabOffsetDeg(pointerAngleDeg, rotationRef.current),
+          lastPointerAngleDeg: pointerAngleDeg,
         };
         setDragging(true);
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        onSteerChange(mobileWheelRotationToSteer(rotationRef.current), true);
+        onSteerChangeRef.current(mobileWheelRotationToSteer(rotationRef.current), true);
       }}
       onPointerMove={(event) => {
         const pointer = pointerRef.current;
         if (!pointer || pointer.id !== event.pointerId) return;
         event.preventDefault();
-        const nextRotationDeg = resolveMobileWheelRotationDeg(
-          pointerAngleForEvent(event),
-          pointer.grabOffsetDeg
+        const pointerAngleDeg = pointerAngleForEvent(event);
+        const nextRotationDeg = advanceMobileWheelRotationDeg(
+          rotationRef.current,
+          pointer.lastPointerAngleDeg,
+          pointerAngleDeg
         );
+        pointer.lastPointerAngleDeg = pointerAngleDeg;
         reportRotation(nextRotationDeg, true);
+      }}
+      onPointerLeave={(event) => {
+        const pointer = pointerRef.current;
+        if (!pointer || pointer.id !== event.pointerId) return;
+        try {
+          if (event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+        } catch {
+          // Older WebKit can throw around capture state; release is safest.
+        }
+        release();
       }}
       onPointerUp={(event) => {
         if (pointerRef.current?.id !== event.pointerId) return;
