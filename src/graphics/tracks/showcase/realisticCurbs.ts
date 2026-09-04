@@ -25,6 +25,8 @@ export const CURB_SYSTEM_KIND = 'continuous-ribbon';
 export const CURB_EDGE_LINE_WIDTH_M = 0.16;
 export const CURB_STRIPE_LENGTH_M = 4.0;
 export const CURB_EDGE_DRAW_CALLS = 3;
+export const CURB_RED_HEX = 0xad3e39;
+export const CURB_WHITE_HEX = 0xded8ce;
 export const CURB_VISUAL_PROFILE_M = [0.004, 0.015, 0.020, 0.010] as const;
 export const CURB_PROFILE_FRACTIONS = [0, 0.16, 0.68, 1] as const;
 
@@ -181,8 +183,8 @@ export function makeWeatheredCurbTexture(): THREE.CanvasTexture {
   canvas.width = 128;
   canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
-  const red = '#ad3e39';
-  const white = '#ded8ce';
+  const red = `#${CURB_RED_HEX.toString(16).padStart(6, '0')}`;
+  const white = `#${CURB_WHITE_HEX.toString(16).padStart(6, '0')}`;
   ctx.fillStyle = red;
   ctx.fillRect(0, 0, 128, 128);
   ctx.fillStyle = white;
