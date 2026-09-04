@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { TRACK_CENTER_X } from '../showcaseCircuit';
 
 // Daylight-first key/fill balance. Road must stay readable; no exposure tricks.
 // Single shadow-casting directional only. Everything else is emissive/unlit.
@@ -8,10 +7,10 @@ export interface ShowcaseLightingRig {
   sun: THREE.DirectionalLight;
 }
 
-export function createShowcaseLightingRig(isMobile: boolean): ShowcaseLightingRig {
+export function createShowcaseLightingRig(isMobile: boolean, trackCenterX = 560): ShowcaseLightingRig {
   const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x2c3324, 0.85);
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.0);
-  sun.position.set(TRACK_CENTER_X + 180, 230, -150);
+  sun.position.set(trackCenterX + 180, 230, -150);
   sun.castShadow = true;
   const size = isMobile ? 1024 : 2048;
   sun.shadow.mapSize.set(size, size);
