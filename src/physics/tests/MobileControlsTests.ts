@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   MOBILE_STEERING_WHEEL_MAX_DEG,
+  advanceMobileWheelRotationDeg,
   clampMobileWheelRotationDeg,
   mapMobileSteeringDirection,
   mobileWheelGrabOffsetDeg,
@@ -38,3 +39,19 @@ assert.equal(mobileWheelSteerToRotationDeg(1), -MOBILE_STEERING_WHEEL_MAX_DEG);
 assert.equal(mobileWheelSteerToRotationDeg(-1), MOBILE_STEERING_WHEEL_MAX_DEG);
 
 console.log('MobileControlsTests: PASS');
+
+assert.equal(
+  advanceMobileWheelRotationDeg(30, 179, -179),
+  32,
+  'Crossing the atan2 +180/-180 seam must continue smoothly.'
+);
+assert.equal(
+  advanceMobileWheelRotationDeg(-30, -179, 179),
+  -32,
+  'Reverse seam crossing must remain mirrored.'
+);
+assert.equal(
+  advanceMobileWheelRotationDeg(134, 10, 30),
+  MOBILE_STEERING_WHEEL_MAX_DEG,
+  'Incremental wheel motion must clamp at full lock without wrapping.'
+);
