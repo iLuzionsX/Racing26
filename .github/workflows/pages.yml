@@ -31,8 +31,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock --no-audit --no-fund
 
-      - name: TypeScript runtime wiring check
-        run: npm run lint
+      - name: App runtime wiring check
+        run: node scripts/app-runtime-wiring-check.mjs
 
       - name: Muse guardrail self-test
         run: node scripts/muse-agent/test.mjs
@@ -112,6 +112,11 @@ jobs:
         if: steps.preview.outputs.enabled == 'true'
         working-directory: preview-source
         run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Check PR preview runtime wiring
+        if: steps.preview.outputs.enabled == 'true'
+        working-directory: preview-source
+        run: node scripts/app-runtime-wiring-check.mjs
 
       - name: Build PR preview
         if: steps.preview.outputs.enabled == 'true'
