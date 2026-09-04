@@ -117,6 +117,20 @@ html[data-driving-mobile='true'] #mobile-pedal-pad {
   filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.28));
 }
 
+/* Balanced inward steering placement: clear the rounded screen edge
+   without drifting toward the driving sightline or enlarging the wheel. */
+html[data-driving-mobile='true'] #mobile-steering-pad {
+  align-items: center;
+  margin-left: 0.15rem;
+  padding-bottom: 0.10rem;
+}
+
+html[data-driving-mobile='true'] #mobile-steering-pad > span {
+  width: 100%;
+  padding-left: 0;
+  text-align: center;
+}
+
 html[data-driving-mobile='true'] #mobile-steering-wheel {
   width: clamp(7rem, 24vw, 9rem);
   height: clamp(7rem, 24vw, 9rem);
