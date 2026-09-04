@@ -35,6 +35,9 @@ jobs:
       - name: Showcase Circuit drivability QA
         run: npm run test:track
 
+      - name: Showcase Circuit visual QA
+        run: npm run test:visual-track
+
       - name: Physics convention guardrails
         run: npm run test:conventions
 
