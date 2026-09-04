@@ -1,0 +1,70 @@
+name: Deploy mobile wheel preview
+
+on:
+  push:
+    branches:
+      - feature/mobile-analog-steering-wheel
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-mobile-wheel-preview
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-src
+
+      - name: Checkout preview
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: preview-src
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build main site
+        working-directory: main-src
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          npm run build -- --base=/Racing26/
+
+      - name: Build wheel preview
+        working-directory: preview-src
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          npm run build -- --base=/Racing26/mobile-wheel-preview/
+
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p site/mobile-wheel-preview
+          cp -R main-src/dist/. site/
+          cp -R preview-src/dist/. site/mobile-wheel-preview/
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+      - name: Deploy preview
+        id: deployment
+        uses: actions/deploy-pages@v4
