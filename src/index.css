@@ -117,6 +117,11 @@ html[data-driving-mobile='true'] #mobile-pedal-pad {
   filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.28));
 }
 
+/* Deliberate thumb-reach clearance beyond the device safe area. */
+html[data-driving-mobile='true'] #mobile-steering-pad {
+  margin-left: clamp(0.35rem, 1.25vw, 0.75rem);
+}
+
 html[data-driving-mobile='true'] #mobile-steering-wheel {
   width: clamp(7rem, 24vw, 9rem);
   height: clamp(7rem, 24vw, 9rem);
