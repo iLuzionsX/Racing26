@@ -112,8 +112,39 @@ export function collectContext(rootDir) {
     if (shouldInclude(repoPath, stat)) files.push({ path: repoPath, bytes: stat.size, content: fs.readFileSync(absolute, 'utf8') });
   }
 
-  const priority = new Map(['AGENTS.md', 'PHYSICS_CONVENTIONS.md', 'M5_VALIDATION.md', 'package.json', 'vite.config.ts', 'tsconfig.json'].map((p, i) => [p, i]));
-  files.sort((a, b) => (priority.get(a.path) ?? 100) - (priority.get(b.path) ?? 100) || a.path.localeCompare(b.path));
+  // Physics delegation is only useful if the force-producing core survives the
+  // context budget. Prioritize the model/wheel/vehicle chain and its direct
+  // deterministic regressions before UI/graphics files are considered.
+  const orderedPriority = [
+    'AGENTS.md',
+    'PHYSICS_CONVENTIONS.md',
+    'M5_VALIDATION.md',
+    'package.json',
+    'src/physics/TireModel.ts',
+    'src/physics/WheelDynamics.ts',
+    'src/physics/Vehicle.ts',
+    'src/physics/Simulation.ts',
+    'src/physics/m5G90.ts',
+    'src/physics/Suspension.ts',
+    'src/physics/SuspensionKinematics.ts',
+    'src/physics/SuspensionKinematicsAdapter.ts',
+    'src/physics/Differential.ts',
+    'src/physics/DriverAids.ts',
+    'src/physics/DigitalSteeringInput.ts',
+    'src/physics/tests/TireModelTests.ts',
+    'src/physics/tests/TireFeelSteeringSweepTests.ts',
+    'src/physics/tests/M5OversteerRecoveryDiagnostic.ts',
+    'src/physics/tests/HighSpeedSpinRegressionTests.ts',
+    'src/physics/tests/HighSpeedKeyboardCorneringTests.ts',
+    'src/physics/tests/FrontDifferentialCornerExitTests.ts',
+    'src/physics/tests/DynamicCornerLoadTests.ts',
+    'src/physics/validation/M5ValidationSuite.ts',
+    'src/physics/validation/M5ValidationCorrectedTests.ts',
+    'vite.config.ts',
+    'tsconfig.json',
+  ];
+  const priority = new Map(orderedPriority.map((p, i) => [p, i]));
+  files.sort((a, b) => (priority.get(a.path) ?? 1000) - (priority.get(b.path) ?? 1000) || a.path.localeCompare(b.path));
 
   const selected = [];
   let total = 0;
