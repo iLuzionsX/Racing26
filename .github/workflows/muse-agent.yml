@@ -1,4 +1,4 @@
-name: Muse Spark tyre config probe
+name: Muse Spark 1.3 xhigh tyre pass
 
 on:
   push:
@@ -14,44 +14,44 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  investigate:
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        agent: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Guardrails
         run: node scripts/muse-agent/test.mjs
-      - name: Probe Muse
+      - name: Run focused xhigh investigation
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-        run: node scripts/muse-agent/run.mjs --task "CONFIGURATION PROBE ONLY. Return JSON with summary config-probe, patch null, no proposed files, no tests, and no recommendations."
-      - name: Verify model and max reasoning
         run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const files = fs.readdirSync('.muse/artifacts').filter((x) => x.endsWith('.json')).sort();
-          if (!files.length) throw new Error('No Muse artifact');
-          const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
-          console.log(JSON.stringify({
-            model: a.model,
-            requested_reasoning_effort: a.requested_reasoning_effort,
-            response_reasoning_effort: a.response_reasoning_effort,
-            status: a.status
-          }, null, 2));
-          if (a.model !== 'muse-spark-1.3-contributor-free') throw new Error('Unexpected model: ' + a.model);
-          if (a.requested_reasoning_effort !== 'max') throw new Error('Request did not use max');
-          if (a.response_reasoning_effort !== 'max') throw new Error('Provider did not confirm max: ' + a.response_reasoning_effort);
-          NODE
-      - name: Upload probe
+          BASE_TASK="$(cat .github/muse-task.txt)"
+          case "${{ matrix.agent }}" in
+            1) FOCUS="INDEPENDENT DIAGNOSIS A. Trace a reproducible abrupt-grip/spinout scenario from slip kinematics through tire forces and chassis response. Do not assume other agents' conclusions." ;;
+            2) FOCUS="INDEPENDENT DIAGNOSIS B. Investigate pure/combined-slip force curves, peak/post-peak recovery, relaxation and low-speed numerical transitions independently." ;;
+            3) FOCUS="INDEPENDENT DIAGNOSIS C. Investigate front/rear balance, transient yaw/sideslip, load transfer, throttle/lift/brake interactions and timestep dependence independently." ;;
+            4) FOCUS="CONFIGURATION AND INITIALIZATION. Audit tire parameters, units, defaults, front/rear assignments, reference loads and startup determinism. Explicitly test the reported rear-reference-load and startup-sampling hypotheses." ;;
+            5) FOCUS="STEERING AND ASSISTS. Audit keyboard and on-screen wheel input, ratio, speed sensitivity, filtering, countersteer, stability assists, ABS/TCS interactions, and whether controls create or mask abrupt handling." ;;
+            6) FOCUS="LOADS AND DRIVETRAIN. Audit per-wheel normal load, load sensitivity, suspension transfer, differential behavior and torque distribution for discontinuities, double-counting, signs or rear unloading." ;;
+            7) FOCUS="BASELINE AND AUTOMATED VALIDATION. Map existing telemetry/tests to the requested ten maneuvers, define repeatable before/after measurements and evidence-derived acceptance criteria, and identify exact harness ownership files. Read-only." ;;
+            8) FOCUS="DRIVING ASSESSMENT. Determine available direct browser-driving capability; distinguish observation from inference. If unavailable, provide the exact repeatable keyboard/on-screen-wheel manual route and telemetry signatures." ;;
+          esac
+          node scripts/muse-agent/run.mjs --task "Agent ${{ matrix.agent }} of 8. $FOCUS
+
+$BASE_TASK"
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: muse-config-probe
+          name: muse-tyre-agent-${{ matrix.agent }}
           path: .muse/artifacts/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
