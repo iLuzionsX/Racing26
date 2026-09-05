@@ -26,6 +26,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Announce gated Muse run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh api "repos/$REPO/issues/126/comments" -f body="MUSE_WORKFLOW_STARTED run=$RUN_ID head=${{ github.sha }}"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
