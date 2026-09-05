@@ -322,7 +322,8 @@ export class SuspensionSystem {
     antiRollCrossCoupling: number,
     wheelRadius: number,
     tireVerticalStiffness: number,
-    dt: number
+    dt: number,
+    planarHubBodyY: number = 0
   ) {
     if (dt <= 0) return;
 
@@ -331,6 +332,8 @@ export class SuspensionSystem {
 
     const hardpointsWorld: Vec3[] = new Array(4);
     const hardpointVelocitiesWorld: Vec3[] = new Array(4);
+    const planarSupportsWorld: Vec3[] = new Array(4);
+    const planarSupportVelocitiesWorld: Vec3[] = new Array(4);
     const roadVelocitiesY = [0, 0, 0, 0];
     const surfaces: SurfaceLike[] = new Array(4);
     const currentDisplacements = [0, 0, 0, 0];
@@ -344,7 +347,35 @@ export class SuspensionSystem {
       const hardpointWorld = PhysicsMath.vec3Add(bodyPosition, hardpointWorldOffset);
       const angularPointVelocity = PhysicsMath.vec3Cross(bodyAngularVelocityWorld, hardpointWorldOffset);
       const hardpointVelocityWorld = PhysicsMath.vec3Add(bodyVelocityWorld, angularPointVelocity);
-      const surface = sampleSurface(hardpointWorld.x, hardpointWorld.z);
+
+      // The unsprung model is a world-vertical slider, so its independent state is
+      // Y only. X/Z still need a body-fixed support line. Anchor that line at the
+      // nominal wheel-center plane, not at the suspension top mount. Rotating the
+      // top-mount height into X/Z made the wheels sweep laterally by centimeters
+      // relative to the wheel arches as the chassis rolled.
+      const planarSupportBody = PhysicsMath.vec3(
+        hardpointsBody[i].x,
+        planarHubBodyY,
+        hardpointsBody[i].z
+      );
+      const planarSupportWorldOffset = PhysicsMath.quatRotateVec3(
+        bodyOrientation,
+        planarSupportBody
+      );
+      const planarSupportWorld = PhysicsMath.vec3Add(
+        bodyPosition,
+        planarSupportWorldOffset
+      );
+      const planarSupportAngularVelocity = PhysicsMath.vec3Cross(
+        bodyAngularVelocityWorld,
+        planarSupportWorldOffset
+      );
+      const planarSupportVelocityWorld = PhysicsMath.vec3Add(
+        bodyVelocityWorld,
+        planarSupportAngularVelocity
+      );
+
+      const surface = sampleSurface(planarSupportWorld.x, planarSupportWorld.z);
       const pickupOffset = Math.max(0, cfg.maxDroop);
 
       let state = this.states[i];
@@ -400,8 +431,8 @@ export class SuspensionSystem {
       // wheel moves horizontally across it: dy/dt = -(nx*vx + nz*vz) / ny.
       const normalY = Math.abs(surface.normal.y) > 0.15 ? surface.normal.y : 1;
       const roadVelocityY = -(
-        surface.normal.x * hardpointVelocityWorld.x +
-        surface.normal.z * hardpointVelocityWorld.z
+        surface.normal.x * planarSupportVelocityWorld.x +
+        surface.normal.z * planarSupportVelocityWorld.z
       ) / normalY;
 
       const tireCompression = Math.max(
@@ -415,6 +446,8 @@ export class SuspensionSystem {
 
       hardpointsWorld[i] = hardpointWorld;
       hardpointVelocitiesWorld[i] = hardpointVelocityWorld;
+      planarSupportsWorld[i] = planarSupportWorld;
+      planarSupportVelocitiesWorld[i] = planarSupportVelocityWorld;
       roadVelocitiesY[i] = roadVelocityY;
       surfaces[i] = surface;
       currentDisplacements[i] = displacement;
@@ -578,9 +611,9 @@ export class SuspensionSystem {
           cfg.staticCamberDeg - cfg.camberGainDegPerMeter * Math.max(0, displacement),
         isAirborne,
         contactPointWorld: PhysicsMath.vec3(
-          hardpointWorld.x,
+          planarSupportsWorld[i].x,
           surface.elevation,
-          hardpointWorld.z
+          planarSupportsWorld[i].z
         ),
         tireCompressionM: tireCompression,
         hubPositionWorldY,
