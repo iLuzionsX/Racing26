@@ -1,83 +1,93 @@
 import assert from 'node:assert/strict';
 import {
-  digitalSteerWindRatePerSecond,
+  digitalCountersteerRecoveryBlend,
+  digitalSteeringLimitForSpeed,
+  digitalSteeringTarget,
   slewAnalogSteeringInput,
   updateDigitalSteeringInput,
+  type DigitalSteeringContext,
 } from '../DigitalSteeringInput';
 
 const DT = 1 / 120;
+const WHEELBASE_M = 3.00482;
+const MAX_STEER_RAD = 0.58;
 
-function holdDigital(
-  direction: -1 | 0 | 1,
-  speedKmh: number,
-  seconds: number,
-  start = 0
-) {
-  let value = start;
-  for (let i = 0; i < Math.round(seconds / DT); i++) {
-    value = updateDigitalSteeringInput(value, direction, speedKmh / 3.6, DT);
-  }
-  return value;
+function impliedLateralG(speedKmh: number, normalizedSteer: number) {
+  const speedMs = speedKmh / 3.6;
+  const roadWheelAngle = Math.abs(normalizedSteer) * MAX_STEER_RAD;
+  return (speedMs * speedMs * Math.tan(roadWheelAngle) / WHEELBASE_M) / 9.81;
 }
 
-function holdAnalog(
-  target: number,
-  speedKmh: number,
-  seconds: number,
-  start = 0
-) {
-  let value = start;
-  for (let i = 0; i < Math.round(seconds / DT); i++) {
-    value = slewAnalogSteeringInput(value, target, speedKmh / 3.6, DT);
+const baseContext = (speedKmh: number): DigitalSteeringContext => ({
+  wheelbaseM: WHEELBASE_M,
+  maxSteerAngleRad: MAX_STEER_RAD,
+  forwardSpeedMs: speedKmh / 3.6,
+});
+
+for (const speedKmh of [100, 130, 160, 180]) {
+  const speedMs = speedKmh / 3.6;
+  const context = baseContext(speedKmh);
+  const limit = digitalSteeringLimitForSpeed(speedMs, context);
+  assert(limit > 0 && limit < 0.25, `${speedKmh} km/h digital limit is implausible: ${limit}`);
+  assert(
+    impliedLateralG(speedKmh, limit) <= 0.90,
+    `${speedKmh} km/h normal digital command exceeds useful tire envelope`
+  );
+
+  let left = 0;
+  let right = 0;
+  for (let i = 0; i < Math.round(1.0 / DT); i++) {
+    left = updateDigitalSteeringInput(left, 1, speedMs, DT, context);
+    right = updateDigitalSteeringInput(right, -1, speedMs, DT, context);
   }
-  return value;
+  assert(Math.abs(left - limit) < 1e-9, `${speedKmh} km/h left did not settle at envelope`);
+  assert(Math.abs(right + limit) < 1e-9, `${speedKmh} km/h right did not mirror envelope`);
 }
 
-const lowRate = digitalSteerWindRatePerSecond(0);
-const rate100 = digitalSteerWindRatePerSecond(100 / 3.6);
-const rate150 = digitalSteerWindRatePerSecond(150 / 3.6);
-const rate180 = digitalSteerWindRatePerSecond(180 / 3.6);
+// Mild opposite steering in a chicane must stay inside the normal envelope.
+const chicane: DigitalSteeringContext = {
+  ...baseContext(150),
+  yawRateRadS: 0.35,
+  sideslipRad: -2 * Math.PI / 180,
+};
+assert(digitalCountersteerRecoveryBlend(-1, 150 / 3.6, chicane) === 0);
+assert(
+  Math.abs(digitalSteeringTarget(-1, 150 / 3.6, chicane)) <=
+    digitalSteeringLimitForSpeed(150 / 3.6, chicane) + 1e-12
+);
 
-assert(lowRate > rate100 && rate100 > rate150 && rate150 >= rate180,
-  'ordinary steering wind-on must calm progressively with road speed');
-assert(rate180 >= 1.39, 'high-speed wind-on rate fell below the recovery-safe floor');
+// Genuine oversteer must unlock substantial/full opposite-lock authority.
+const severeRecovery: DigitalSteeringContext = {
+  ...baseContext(150),
+  yawRateRadS: 1.05,
+  sideslipRad: -18 * Math.PI / 180,
+};
+const recoveryBlend = digitalCountersteerRecoveryBlend(-1, 150 / 3.6, severeRecovery);
+const recoveryTarget = digitalSteeringTarget(-1, 150 / 3.6, severeRecovery);
+assert(recoveryBlend > 0.95, `severe slide did not unlock recovery: ${recoveryBlend}`);
+assert(recoveryTarget < -0.95, `severe slide lost opposite lock: ${recoveryTarget}`);
 
-// The former constant 4.8/s path reached ~0.72 rack fraction in 150 ms.
-// A normal 150 km/h turn-in must build much more progressively.
-const digital150 = holdDigital(1, 150, 0.15);
-const digital150Mirror = holdDigital(-1, 150, 0.15);
-assert(digital150 > 0.15 && digital150 < 0.40,
-  `150 km/h digital turn-in is still too abrupt: ${digital150.toFixed(3)}`);
-assert(Math.abs(digital150 + digital150Mirror) < 1e-12,
-  'digital high-speed steering must mirror left/right exactly');
+let recovery = 0.15;
+for (let i = 0; i < Math.round(0.15 / DT); i++) {
+  recovery = updateDigitalSteeringInput(recovery, -1, 150 / 3.6, DT, severeRecovery);
+}
+assert(recovery < -0.75, `state-aware recovery is too slow: ${recovery.toFixed(3)}`);
 
-// Analog mouse/on-screen-wheel targets used to teleport to the raw target in one
-// render frame. The applied command must now obey the same high-speed hand rate.
-const analogOneStep = slewAnalogSteeringInput(0, 1, 150 / 3.6, DT);
-assert(analogOneStep > 0 && analogOneStep <= rate150 * DT + 1e-12,
-  `analog target teleported into the rack: ${analogOneStep.toFixed(4)}`);
-assert(Math.abs(
-  analogOneStep + slewAnalogSteeringInput(0, -1, 150 / 3.6, DT)
-) < 1e-12, 'analog high-speed steering must mirror left/right exactly');
+// Analog hand position is not amplitude-capped: only teleport velocity is removed.
+const oneStep = slewAnalogSteeringInput(0, 1, DT);
+assert(oneStep > 0 && oneStep <= 4.8 * DT + 1e-12, `analog teleported: ${oneStep}`);
+assert(Math.abs(oneStep + slewAnalogSteeringInput(0, -1, DT)) < 1e-12);
 
-// We are changing input velocity, not mechanical rack travel.
-assert(Math.abs(holdDigital(1, 150, 1.0) - 1) < 1e-12,
-  'digital full rack authority must remain available');
-assert(Math.abs(holdAnalog(1, 150, 1.0) - 1) < 1e-12,
-  'analog full rack authority must remain available');
-
-// Opposite-lock and unwind are deliberately faster than ordinary wind-on.
-let digitalRecovery = 0.25;
-digitalRecovery = holdDigital(-1, 150, 0.10, digitalRecovery);
-assert(digitalRecovery < -0.25,
-  `digital countersteer recovery became too slow: ${digitalRecovery.toFixed(3)}`);
+let analog = 0;
+for (let i = 0; i < Math.round(0.25 / DT); i++) {
+  analog = slewAnalogSteeringInput(analog, 1, DT);
+}
+assert(Math.abs(analog - 1) < 1e-12, 'analog full mechanical rack must remain available');
 
 let analogRecovery = 0.25;
-analogRecovery = holdAnalog(-1, 150, 0.10, analogRecovery);
-assert(analogRecovery < -0.25,
-  `analog countersteer recovery became too slow: ${analogRecovery.toFixed(3)}`);
-
-const released = holdAnalog(0, 150, 0.20, 0.9);
-assert(Math.abs(released) < 1e-12, 'analog steering must unwind to center promptly');
+for (let i = 0; i < Math.round(0.10 / DT); i++) {
+  analogRecovery = slewAnalogSteeringInput(analogRecovery, -1, DT);
+}
+assert(analogRecovery < -0.25, `analog countersteer is too slow: ${analogRecovery.toFixed(3)}`);
 
 console.log('HighSpeedSteeringInputTests: PASS');
