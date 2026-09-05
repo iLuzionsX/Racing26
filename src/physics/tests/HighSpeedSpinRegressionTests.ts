@@ -66,11 +66,10 @@ type ContactKinematicProbe = {
  * the authoritative suspension contact X/Z at the same instant.
  *
  * The reduced unsprung model is world-vertical in Y. Its X/Z support is a
- * body-fixed line through the nominal wheel-center plane:
- *   wheel-center body Y = wheelRadius - CG height.
- * Anchoring the slider at the suspension top mount makes chassis roll sweep the
- * wheels laterally relative to the wheel arches and gives tire slip the wrong
- * roll/pitch-rate lever arm.
+ * body-fixed line through the static roll center derived from the same virtual
+ * wishbone geometry that controls camber and bump steer. Anchoring the slider at
+ * the suspension top mount makes chassis roll sweep the wheels laterally relative
+ * to the wheel arches and gives tire slip the wrong roll/pitch-rate lever arm.
  */
 function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
   const probe: ContactKinematicProbe = {
@@ -81,7 +80,15 @@ function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
     samples: 0,
   };
   const hardpoints = sim.vehicle.getHardpointsBody();
-  const planarHubBodyY = config.wheelRadius - config.centerOfGravityHeight;
+  const supportHeightsAboveRoad = sim.vehicle.planarSupportBodyYByCorner.map(
+    (bodyY) => bodyY + config.centerOfGravityHeight
+  );
+  for (const height of supportHeightsAboveRoad) {
+    assert(
+      height > 0 && height < 0.20,
+      `derived suspension roll center is implausible: ${height.toFixed(4)} m above road`
+    );
+  }
 
   sim.vehicle.wheels.forEach((wheel, index) => {
     const downstreamUpdate = wheel.update.bind(wheel);
@@ -100,7 +107,11 @@ function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
     ) => {
       const rigid = sim.vehicle.rigidBody;
       const hp = hardpoints[index];
-      const supportBody = PhysicsMath.vec3(hp.x, planarHubBodyY, hp.z);
+      const supportBody = PhysicsMath.vec3(
+        hp.x,
+        sim.vehicle.planarSupportBodyYByCorner[index],
+        hp.z
+      );
 
       // Exact velocity of the body-fixed X/Z support used by SuspensionSystem.
       const supportVelocityBody = rigid.getPointVelocityBody(supportBody);
@@ -290,7 +301,7 @@ for (const speedKmh of SPEEDS_KMH) {
     assert(row.maxTopMountAnchorOffsetM > 0.001,
       `${speedKmh} km/h maneuver did not exercise top-mount vs wheel-center roll geometry`);
     assert(row.maxSupportPositionErrorM < 1e-9,
-      `${speedKmh} km/h suspension contact X/Z left the wheel-center support plane: ${row.maxSupportPositionErrorM.toFixed(9)} m`);
+      `${speedKmh} km/h suspension contact X/Z left the roll-center support plane: ${row.maxSupportPositionErrorM.toFixed(9)} m`);
     assert(row.maxContactKinematicErrorMs < 1e-6,
       `${speedKmh} km/h tire planar velocity did not follow the suspension X/Z support: ${row.maxContactKinematicErrorMs.toFixed(6)} m/s`);
   }
