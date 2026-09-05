@@ -257,17 +257,21 @@ export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
     // Exact racerrhi semantics: the physical kerb overlaps the outer edge of the
     // 15 m road and is authoritative there. This ordering is deliberate.
     if (absLateral > 7.0 && absLateral <= 8.25) {
-      return make('kerb', 0.88, 0.024, true, s.center.y + 0.045);
+      return make('kerb', 0.88, 0.024, true);
     }
 
     if (absLateral <= TRACK_HALF_WIDTH_M) {
       return make('asphalt', 1.0, 0.015, false);
     }
 
-    // The 33 m gravel ribbon is visibly drawn beneath/around the asphalt. Outside
-    // that shelf the player is on coastal terrain, which is also legitimately low
-    // grip. There are no invisible low-grip bands inside the visible road.
-    return make('gravel', 0.55, 0.075, false, s.center.y - 0.09);
+    // Racerrhi rendered the gravel ribbon 90 mm low and the kerbs 45 mm high, but
+    // its M5 bridge intentionally kept the *physics* contact deck continuous in Y.
+    // Preserve that separation here: the material/friction changes are real while
+    // the decorative offsets cannot inject a suspension impulse into the M5.
+    //
+    // Outside the shelf the player is on coastal terrain, which is legitimately low
+    // grip. There are no invisible low-grip bands inside the visible asphalt.
+    return make('gravel', 0.55, 0.075, false);
   }
 }
 
