@@ -55,21 +55,22 @@ function usefulSteerInput(speedMs: number): number {
 
 type ContactKinematicProbe = {
   maxProductionErrorMs: number;
-  maxLegacyShortcutErrorMs: number;
+  maxRoadHeightShortcutErrorMs: number;
   samples: number;
 };
 
 /**
- * Intercept the velocity pair Vehicle actually passes into each wheel. At speed,
- * that pair must come from the same physical contact patch used for force
- * application. This directly guards the rolled/pitched chassis lever-arm bug:
- * the historical fixed body-space shortcut diverges from the real contact point
- * as load transfer rotates the body.
+ * Intercept the planar velocity Vehicle actually passes into each wheel.
+ *
+ * SuspensionSystem constrains hub/contact XZ to hardpointWorld XZ. Therefore the
+ * correct planar velocity in this reduced model is the rigid-body velocity of that
+ * hardpoint. A road-height contact has an independent Y coordinate and is not a
+ * material chassis point; treating it as one adds a false roll/pitch-rate term.
  */
 function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
   const probe: ContactKinematicProbe = {
     maxProductionErrorMs: 0,
-    maxLegacyShortcutErrorMs: 0,
+    maxRoadHeightShortcutErrorMs: 0,
     samples: 0,
   };
   const hardpoints = sim.vehicle.getHardpointsBody();
@@ -90,21 +91,17 @@ function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
       reflectedDrivelineInertia: number = 0
     ) => {
       const rigid = sim.vehicle.rigidBody;
-      const contactWorld = sim.vehicle.suspension.states[index].contactPointWorld;
-      const contactArmWorld = PhysicsMath.vec3Sub(contactWorld, rigid.position);
-      const actualPointBody = PhysicsMath.quatInverseRotateVec3(
-        rigid.orientation,
-        contactArmWorld
-      );
-      const actualVelocityBody = rigid.getPointVelocityBody(actualPointBody);
+      const hp = hardpoints[index];
 
+      // Exact X/Z support trajectory used by SuspensionSystem.
+      const supportVelocityBody = rigid.getPointVelocityBody(hp);
       const steer = wheel.steerAngle;
       const sinS = Math.sin(steer);
       const cosS = Math.cos(steer);
       const expectedLongitudinal =
-        actualVelocityBody.x * sinS + actualVelocityBody.z * cosS;
+        supportVelocityBody.x * sinS + supportVelocityBody.z * cosS;
       const expectedLateral =
-        actualVelocityBody.x * cosS - actualVelocityBody.z * sinS;
+        supportVelocityBody.x * cosS - supportVelocityBody.z * sinS;
 
       probe.maxProductionErrorMs = Math.max(
         probe.maxProductionErrorMs,
@@ -114,22 +111,25 @@ function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
         )
       );
 
-      const hp = hardpoints[index];
-      const legacyPointBody = PhysicsMath.vec3(
-        hp.x,
-        -config.centerOfGravityHeight,
-        hp.z
+      // Reconstruct the rejected PR #127 assumption. This point's Y is road
+      // constrained, so treating it as rigid must diverge when roll/pitch rate is
+      // nonzero even though X/Z remain tied to the hardpoint.
+      const contactWorld = sim.vehicle.suspension.states[index].contactPointWorld;
+      const contactArmWorld = PhysicsMath.vec3Sub(contactWorld, rigid.position);
+      const contactPointBody = PhysicsMath.quatInverseRotateVec3(
+        rigid.orientation,
+        contactArmWorld
       );
-      const legacyVelocityBody = rigid.getPointVelocityBody(legacyPointBody);
-      const legacyLongitudinal =
-        legacyVelocityBody.x * sinS + legacyVelocityBody.z * cosS;
-      const legacyLateral =
-        legacyVelocityBody.x * cosS - legacyVelocityBody.z * sinS;
-      probe.maxLegacyShortcutErrorMs = Math.max(
-        probe.maxLegacyShortcutErrorMs,
+      const roadHeightVelocityBody = rigid.getPointVelocityBody(contactPointBody);
+      const roadLongitudinal =
+        roadHeightVelocityBody.x * sinS + roadHeightVelocityBody.z * cosS;
+      const roadLateral =
+        roadHeightVelocityBody.x * cosS - roadHeightVelocityBody.z * sinS;
+      probe.maxRoadHeightShortcutErrorMs = Math.max(
+        probe.maxRoadHeightShortcutErrorMs,
         Math.hypot(
-          legacyLongitudinal - expectedLongitudinal,
-          legacyLateral - expectedLateral
+          roadLongitudinal - expectedLongitudinal,
+          roadLateral - expectedLateral
         )
       );
       probe.samples++;
@@ -219,7 +219,7 @@ function run(speedKmh: number, direction: 1 | -1) {
     minWheelLoadN,
     releasePeakYawDegS,
     maxContactKinematicErrorMs: contactProbe.maxProductionErrorMs,
-    maxLegacyContactShortcutErrorMs: contactProbe.maxLegacyShortcutErrorMs,
+    maxRoadHeightShortcutErrorMs: contactProbe.maxRoadHeightShortcutErrorMs,
     contactKinematicSamples: contactProbe.samples,
   };
 }
@@ -250,10 +250,10 @@ for (const speedKmh of SPEEDS_KMH) {
       `${speedKmh} km/h yaw failed to settle after steering release: ${row.releasePeakYawDegS.toFixed(1)} deg/s`);
     assert(row.contactKinematicSamples > 100,
       `${speedKmh} km/h contact kinematic probe did not collect enough samples`);
-    assert(row.maxLegacyContactShortcutErrorMs > 0.001,
-      `${speedKmh} km/h maneuver did not exercise the rolled/pitched contact-point distinction`);
+    assert(row.maxRoadHeightShortcutErrorMs > 0.001,
+      `${speedKmh} km/h maneuver did not exercise the road-height/support velocity distinction`);
     assert(row.maxContactKinematicErrorMs < 1e-6,
-      `${speedKmh} km/h tire slip velocity was evaluated at a different point than force application: ${row.maxContactKinematicErrorMs.toFixed(6)} m/s`);
+      `${speedKmh} km/h tire planar velocity did not follow the suspension X/Z support: ${row.maxContactKinematicErrorMs.toFixed(6)} m/s`);
   }
 
   assert(mirrorError(left.peakYawDegS, right.peakYawDegS, 2) < 0.15,
