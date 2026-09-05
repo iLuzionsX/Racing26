@@ -1,4 +1,4 @@
-name: Muse Spark xhigh tyre implementation
+name: Muse Spark xhigh tyre verification
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  implement:
+  verify:
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -26,17 +26,17 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/muse-agent/test.mjs
-      - name: Run Muse implementation review
+      - name: Run Muse adversarial verification
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           AGENT_ID: ${{ matrix.agent }}
         run: |
-          node scripts/muse-agent/run.mjs --task "Agent $AGENT_ID of 3. Read .github/muse-task.txt first. Agent 1: tire-model implementer. Agent 2: transient/balance implementer. Agent 3: adversarial reviewer. Only perform your numbered assignment. You may propose a patch within policy; keep it minimal and include deterministic tests and falsifiers."
+          node scripts/muse-agent/run.mjs --task "This command is authoritative; .github files are intentionally excluded from the agent snapshot, so do not ask for or block on a task file. Verify the current branch after the WheelDynamics transient combined-slip limiter was changed from a single circular resultant clamp to the same axis-aware superellipse semantics returned by TireModel. Goal: progressive/readable/catchable limit behavior without changing peak grip, steering, yaw damping, assists, suspension, or drivetrain. Agent $AGENT_ID of 3: Agent 1 inspect TireModel + WheelDynamics for mathematical consistency, continuity, symmetry, and any force-limit regression. Agent 2 inspect full-car transient consequences: brake-release, throttle-on, countersteer, oversteer recovery, high-speed spin, load transfer and differential interactions; identify any mechanism that could make the change less stable or unrealistic. Agent 3 act as adversarial reviewer: try to falsify the change, look for low-speed/rolling-resistance/anisotropic-limit edge cases and telemetry-semantic errors, and propose a patch only for a clear defect. Do not tune grip or add hidden stabilization. Return exact files inspected, findings, tests/falsifiers, risks, and patch=null unless a concrete defect is proven."
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: muse-tyre-implementation-agent-${{ matrix.agent }}
+          name: muse-tyre-verification-agent-${{ matrix.agent }}
           path: .muse/artifacts/
           if-no-files-found: error
           retention-days: 7
