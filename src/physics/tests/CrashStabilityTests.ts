@@ -3,6 +3,10 @@ import { DEFAULT_VEHICLE_CONFIG } from '../vehiclePresets';
 import { BMW_M5_2025_OVERRIDES } from '../m5G90';
 import { PhysicsMath } from '../math/PhysicsMath';
 import { probeChassisContact } from '../CrashStability';
+import {
+  SHOWCASE_PATH,
+  ShowcaseCircuitSurfaceProvider,
+} from '../../graphics/tracks/showcaseCircuit';
 
 const assert = (condition: boolean, message: string) => {
   if (!condition) throw new Error(message);
@@ -233,6 +237,118 @@ const recoveredGrip = measureSameSurfaceGrip(crashSim);
 const recoveredGripRatio = recoveredGrip.meanLateralForceN /
   Math.max(1, freshGrip.meanLateralForceN);
 
+// ---------------------------------------------------------------------------
+// Racerrhi circuit version of the same invariant. This specifically guards the
+// user's reported failure mode on the restored APEX / Côte d'Azur track:
+// a violent disturbance may move the car into visible gravel, but once the same
+// already-disturbed car is physically back on visible asphalt it must recover the
+// same cornering authority as a fresh M5. No tire/suspension reset is allowed.
+// ---------------------------------------------------------------------------
+const racerrhiProvider = new ShowcaseCircuitSurfaceProvider(SHOWCASE_PATH);
+const racerrhiStation = SHOWCASE_PATH.sampleAt(0.006);
+const racerrhiYaw = Math.atan2(racerrhiStation.tangent.x, racerrhiStation.tangent.z);
+
+function placeOnRacerrhiAsphaltPreservingState(sim: Simulation, speedMs: number) {
+  const body = sim.vehicle.rigidBody;
+  body.position = PhysicsMath.vec3(
+    racerrhiStation.center.x,
+    racerrhiStation.center.y + config.centerOfGravityHeight,
+    racerrhiStation.center.z
+  );
+  body.orientation = PhysicsMath.quatFromEuler(0, racerrhiYaw, 0);
+  body.velocity = PhysicsMath.quatRotateVec3(
+    body.orientation,
+    PhysicsMath.vec3(0, 0, speedMs)
+  );
+  body.angularVelocity = PhysicsMath.vec3(0, 0, 0);
+  sim.vehicle.wheels.forEach((wheel) => {
+    wheel.angularVelocity = speedMs / config.wheelRadius;
+  });
+
+  // Preserve all transient tire, thermal, wear, suspension and driveline state.
+  // Only pose/rolling speed are normalized so the same disturbed car can be
+  // compared against a fresh car on the exact same physical asphalt.
+  for (let i = 0; i < 240; i++) sim.stepExplicit(neutral, 1);
+}
+
+function measureRacerrhiGrip(sim: Simulation) {
+  let lateralForceSumN = 0;
+  let normalForceSumN = 0;
+  let asphaltSamples = 0;
+  let samples = 0;
+  for (let i = 0; i < 72; i++) {
+    const state = sim.stepExplicit({ ...neutral, steer: 0.04 }, 1);
+    if (i >= 24) {
+      lateralForceSumN += Math.abs(
+        state.wheels.reduce((sum, wheel) => sum + wheel.forceVectorLat, 0)
+      );
+      normalForceSumN += state.wheels.reduce((sum, wheel) => sum + wheel.forceVectorNorm, 0);
+      asphaltSamples += state.wheels.filter((wheel) => wheel.surfaceType === 'asphalt').length;
+      samples++;
+    }
+  }
+  return {
+    meanLateralForceN: lateralForceSumN / Math.max(1, samples),
+    meanNormalForceN: normalForceSumN / Math.max(1, samples),
+    asphaltFraction: asphaltSamples / Math.max(1, samples * 4),
+  };
+}
+
+const freshRacerrhiSim = new Simulation(config, racerrhiProvider);
+freshRacerrhiSim.reset(racerrhiStation.center.x, racerrhiStation.center.z, racerrhiYaw);
+freshRacerrhiSim.vehicle.rigidBody.position.y =
+  racerrhiStation.center.y + config.centerOfGravityHeight;
+freshRacerrhiSim.vehicle.suspension.reset();
+freshRacerrhiSim.suspensionKinematics.reset();
+for (let i = 0; i < 360; i++) freshRacerrhiSim.stepExplicit(neutral, 1);
+placeOnRacerrhiAsphaltPreservingState(freshRacerrhiSim, 15);
+const freshRacerrhiGrip = measureRacerrhiGrip(freshRacerrhiSim);
+
+const disturbedRacerrhiSim = new Simulation(config, racerrhiProvider);
+disturbedRacerrhiSim.reset(racerrhiStation.center.x, racerrhiStation.center.z, racerrhiYaw);
+disturbedRacerrhiSim.vehicle.rigidBody.position = PhysicsMath.vec3(
+  racerrhiStation.center.x,
+  racerrhiStation.center.y + 2.0,
+  racerrhiStation.center.z
+);
+disturbedRacerrhiSim.vehicle.rigidBody.orientation = PhysicsMath.quatFromEuler(
+  18 * Math.PI / 180,
+  racerrhiYaw,
+  72 * Math.PI / 180
+);
+disturbedRacerrhiSim.vehicle.suspension.reset();
+const racerrhiImpactBasis = PhysicsMath.quatFromEuler(0, racerrhiYaw, 0);
+disturbedRacerrhiSim.vehicle.rigidBody.velocity = PhysicsMath.quatRotateVec3(
+  racerrhiImpactBasis,
+  PhysicsMath.vec3(12, -7.5, 20)
+);
+disturbedRacerrhiSim.vehicle.rigidBody.angularVelocity = PhysicsMath.vec3(3.5, 2.2, 5.4);
+disturbedRacerrhiSim.vehicle.wheels.forEach((wheel) => wheel.reset(22));
+
+for (let i = 0; i < 600; i++) {
+  disturbedRacerrhiSim.stepExplicit(neutral, 1);
+  assert(finiteVehicle(disturbedRacerrhiSim), 'Racerrhi disturbance produced non-finite state');
+}
+
+placeOnRacerrhiAsphaltPreservingState(disturbedRacerrhiSim, 15);
+const recoveredRacerrhiGrip = measureRacerrhiGrip(disturbedRacerrhiSim);
+const recoveredRacerrhiGripRatio =
+  recoveredRacerrhiGrip.meanLateralForceN / Math.max(1, freshRacerrhiGrip.meanLateralForceN);
+
+assert(
+  freshRacerrhiGrip.asphaltFraction > 0.95 && recoveredRacerrhiGrip.asphaltFraction > 0.95,
+  'Racerrhi grip comparison left visible asphalt during measurement'
+);
+assert(
+  recoveredRacerrhiGrip.meanNormalForceN > freshRacerrhiGrip.meanNormalForceN * 0.90,
+  'Racerrhi post-disturbance tire load did not recover on visible asphalt'
+);
+assert(
+  recoveredRacerrhiGripRatio > 0.85,
+  'Racerrhi post-disturbance grip stayed low after returning to asphalt: ratio=' +
+    recoveredRacerrhiGripRatio.toFixed(3)
+);
+
 assert(
   recoveredGrip.meanNormalForceN > freshGrip.meanNormalForceN * 0.90,
   `post-crash tire load did not recover on the same surface: recovered=${recoveredGrip.meanNormalForceN.toFixed(0)} N fresh=${freshGrip.meanNormalForceN.toFixed(0)} N`
@@ -272,6 +388,15 @@ console.log(JSON.stringify({
       recoveredGripRatio,
       freshMeanNormalForceN: freshGrip.meanNormalForceN,
       recoveredMeanNormalForceN: recoveredGrip.meanNormalForceN,
+    },
+    racerrhiSameSurfaceGrip: {
+      freshMeanLateralForceN: freshRacerrhiGrip.meanLateralForceN,
+      recoveredMeanLateralForceN: recoveredRacerrhiGrip.meanLateralForceN,
+      recoveredGripRatio: recoveredRacerrhiGripRatio,
+      freshMeanNormalForceN: freshRacerrhiGrip.meanNormalForceN,
+      recoveredMeanNormalForceN: recoveredRacerrhiGrip.meanNormalForceN,
+      freshAsphaltFraction: freshRacerrhiGrip.asphaltFraction,
+      recoveredAsphaltFraction: recoveredRacerrhiGrip.asphaltFraction,
     },
     nonFiniteSamples: crashNonFinite,
   },
