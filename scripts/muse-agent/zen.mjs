@@ -1,6 +1,6 @@
 const ENDPOINT = 'https://opencode.ai/zen/v1/responses';
 const MODEL = 'muse-spark-1.3-contributor-free';
-const REASONING_EFFORT = 'max';
+const REASONING_EFFORT = 'xhigh';
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 export class ZenError extends Error {
@@ -117,7 +117,7 @@ export class OpenCodeZenClient {
         const data = await response.json();
         const text = extractResponseText(data);
         if (!text) throw new ZenError('EMPTY_RESPONSE', 'OpenCode Zen returned no usable Muse response.');
-        return { text, data, model: data?.model || MODEL, usage: data?.usage || null, reasoningEffort: data?.reasoning?.effort || data?.reasoning_effort || null };
+        return { text, data, model: data?.model || MODEL, usage: data?.usage || null, reasoningEffort: data?.reasoning?.effort || data?.reasoning_effort || REASONING_EFFORT };
       } catch (caught) {
         if (signal?.aborted) throw new ZenError('CANCELLED', 'Muse request cancelled.');
         if (linked.signal.reason?.code === 'TIMEOUT' || caught?.name === 'AbortError') {
