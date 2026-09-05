@@ -26,3 +26,5 @@ Every report must include:
 - patch=null
 
 Do not claim browser driving, tests, measurements, or runtime observations you did not actually perform.
+
+Wave-1 trigger: 2026-09-04T20:36-04:00. Read-only diagnosis; baseline remains c29e33d8f05f21d85c85a79947c51adcf0d67e50.
