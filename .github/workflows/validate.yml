@@ -44,8 +44,23 @@ jobs:
       - name: Physics convention guardrails
         run: npm run test:conventions
 
+      - name: Digital steering unit regression
+        run: npm run test:digital-steering
+
       - name: High-speed steering input regression
         run: npm run test:high-speed-steering
+
+      - name: Digital steering render-FPS invariance
+        run: npm run test:digital-steering-fps
+
+      - name: Analog steering render-FPS invariance
+        run: npm run test:analog-steering-fps
+
+      - name: High-speed keyboard cornering
+        run: npm run test:keyboard-cornering
+
+      - name: M5 oversteer recovery
+        run: npm run test:m5-oversteer
 
       - name: High-speed spin regression
         run: npm run test:high-speed-spin
