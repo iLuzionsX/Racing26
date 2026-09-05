@@ -1,4 +1,4 @@
-name: Muse Spark xhigh tyre pass
+name: Muse Spark xhigh tyre implementation
 
 on:
   push:
@@ -9,20 +9,15 @@ permissions:
   contents: read
 
 jobs:
-  investigate:
+  implement:
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 3
       matrix:
         agent:
           - 1
           - 2
           - 3
-          - 4
-          - 5
-          - 6
-          - 7
-          - 8
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -31,17 +26,17 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/muse-agent/test.mjs
-      - name: Run Muse investigation
+      - name: Run Muse implementation review
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           AGENT_ID: ${{ matrix.agent }}
         run: |
-          node scripts/muse-agent/run.mjs --task "Agent $AGENT_ID of 8. Read .github/muse-task.txt first. This is a read-only investigation: patch must be null. Agent 1: independent abrupt-grip diagnosis. Agent 2: independent tire force-curve and combined-slip diagnosis. Agent 3: independent balance, transient and timestep diagnosis. Agent 4: configuration, reference-load and startup-determinism audit. Agent 5: steering, keyboard, on-screen wheel and assists audit. Agent 6: wheel loads, suspension, differential and drivetrain audit. Agent 7: baseline telemetry and automated-validation plan. Agent 8: direct-driving capability assessment and repeatable manual driving protocol. Only perform the assignment matching your agent number. Return reproduction, code paths, causal explanation, measurements or precise measurement plan, falsifier, smallest correction, and remaining uncertainty."
+          node scripts/muse-agent/run.mjs --task "Agent $AGENT_ID of 3. Read .github/muse-task.txt first. Agent 1: tire-model implementer. Agent 2: transient/balance implementer. Agent 3: adversarial reviewer. Only perform your numbered assignment. You may propose a patch within policy; keep it minimal and include deterministic tests and falsifiers."
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: muse-tyre-agent-${{ matrix.agent }}
+          name: muse-tyre-implementation-agent-${{ matrix.agent }}
           path: .muse/artifacts/
           if-no-files-found: error
           retention-days: 7
