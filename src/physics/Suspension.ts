@@ -333,7 +333,6 @@ export class SuspensionSystem {
     const hardpointsWorld: Vec3[] = new Array(4);
     const hardpointVelocitiesWorld: Vec3[] = new Array(4);
     const planarSupportsWorld: Vec3[] = new Array(4);
-    const planarSupportVelocitiesWorld: Vec3[] = new Array(4);
     const roadVelocitiesY = [0, 0, 0, 0];
     const surfaces: SurfaceLike[] = new Array(4);
     const currentDisplacements = [0, 0, 0, 0];
@@ -447,7 +446,6 @@ export class SuspensionSystem {
       hardpointsWorld[i] = hardpointWorld;
       hardpointVelocitiesWorld[i] = hardpointVelocityWorld;
       planarSupportsWorld[i] = planarSupportWorld;
-      planarSupportVelocitiesWorld[i] = planarSupportVelocityWorld;
       roadVelocitiesY[i] = roadVelocityY;
       surfaces[i] = surface;
       currentDisplacements[i] = displacement;
