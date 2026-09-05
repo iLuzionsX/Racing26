@@ -142,13 +142,13 @@ function testWheelAuthorityHandsOffBeforeSidewaysJacking() {
 function testProvingGroundCrashDisplacementDoesNotEnterHiddenGravel() {
   const surface = new ProvingGroundSurfaceProvider();
   const center = surface.sampleSurface(0, 0);
-  const displacedApron = surface.sampleSurface(40, 0);
+  const displacedApron = surface.sampleSurface(40, 200);
   const wetSkidpad = surface.sampleSurface(85, -60);
 
   assert(center.type === 'racing_line', `center runway type changed to ${center.type}`);
   assert(near(center.friction, 1.10), `center runway friction changed to ${center.friction}`);
 
-  // This is the key crash-recovery guardrail: the visible plane at x=40 m is
+  // This is the key crash-recovery guardrail: the visible plane at x=40 m, z=200 m is
   // ordinary asphalt. A lateral impact must not silently put all four tires on
   // invisible 0.55-mu gravel while the player still sees the same asphalt mesh.
   assert(
