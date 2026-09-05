@@ -1,31 +1,34 @@
-TYRE RESPONSE / CORNERING BALANCE — INITIAL READ-ONLY INVESTIGATION
+TYRE RESPONSE / CORNERING BALANCE — IMPLEMENTATION WAVE
 
 Exact gameplay baseline commit: c29e33d8f05f21d85c85a79947c51adcf0d67e50
 Repository: iLuzionsX/Racing26
 
-Goal: make the car's grip limit progressive, readable, and controllable without blanket grip increases, arbitrary yaw damping, excessive smoothing, or hidden assists. Preserve the completed tyre-grip, steering-ratio, track-jitter, braking/suspension, and high-speed-spinout work already present at this baseline.
+Goal: make the M5 grip limit progressive, readable, and controllable without blanket grip increases, arbitrary yaw damping, excessive smoothing, or hidden assists. Preserve the completed tyre-grip, steering-ratio, track-jitter, braking/suspension, low-speed-cornering, and high-speed-spinout work already present at this baseline.
 
-This initial wave is DIAGNOSIS ONLY. Do not edit source, do not return a patch, and set patch=null. You may recommend the smallest correction and a falsifying test. Distinguish direct repository evidence from inference. Use the exact baseline above in your report.
+Wave-1 evidence already gathered from eight read-only Muse Spark 1.3 xhigh agents. Important findings to treat as hypotheses requiring code-level verification:
+- The steering input path is already speed-shaped for keyboard and preserves full analog rack; do not retune steering unless a falsifier fails.
+- Surface friction has hard material boundaries, but that is not a sufficient explanation for on-road limit behavior; do not smooth track materials unless a dedicated boundary test proves it is the cause.
+- TireModel currently computes pure longitudinal/lateral Magic-Formula forces, applies MF-style cross weighting, then a post-peak slideScale and a final superellipse projection. WheelDynamics relaxes slip and then force, with different lateral/longitudinal lengths.
+- Avoid changing total peak grip as the primary fix. Focus on transition quality at combined-slip saturation/post-peak and transient recovery.
+- Reference-load assignment must be verified from Vehicle/WheelDynamics/TireModel before proposing any fix; do not assume it is wrong.
 
-Shared scenario to investigate where applicable:
-- 2025 BMW M5 normal simulation path, dry flat/high-quality road
-- stable entry at moderate/high speed, smoothly increasing steering until front or rear reaches the limit
-- repeat with lift, brake-release, and throttle-on transitions
-- inspect the same scenario in both directions and at more than one speed
-- use existing deterministic telemetry/validation paths whenever possible
+IMPLEMENTATION WAVE: each agent may propose a patch. Keep it small, scoped, and testable. Do not apply hidden stability aids or global yaw damping. Do not alter unrelated UI/track code.
+
+Agent assignments:
+1) Tire-model implementer: inspect TireModel.ts + WheelDynamics.ts + m5G90.ts + tire tests. Propose the smallest physics change that makes the combined-slip/post-peak transition more progressive while preserving peak grip and steady-state capacity. Add/adjust deterministic tests that directly measure continuity and left/right symmetry.
+2) Transient/balance implementer: independently inspect TireModel/WheelDynamics/Vehicle/Suspension/Differential and propose the smallest change, if any, needed for catchable modest slides and coherent brake/throttle/steer interaction. Prefer fixing state/relaxation coupling over damping the chassis. Add a falsifying regression test. If no change is justified, patch=null and say so.
+3) Adversarial reviewer: inspect the same code and the existing test suite. Do not optimize for agreement. Identify failure modes in likely TireModel/WheelDynamics fixes, define before/after metrics, and propose only test/harness changes unless a clear production defect is proven.
 
 Every report must include:
-- baseline commit
-- reproduction steps
-- relevant code paths
-- causal explanation
-- supporting measurements already available or a precise measurement plan
-- a test that could disprove the explanation
-- smallest proposed correction
-- remaining uncertainty
-- patch=null
+- exact branch/head inspected
+- reproduction or deterministic test scenario
+- code paths and mechanism
+- before/after measurement expectation
+- falsifier
+- patch (unified diff) or patch=null
+- tests to run
+- risks / regressions to watch
 
 Do not claim browser driving, tests, measurements, or runtime observations you did not actually perform.
 
-Authorized configuration update: Muse Spark 1.3 with reasoning.effort=xhigh.
-Wave-1 xhigh trigger: 2026-09-04T21:00-04:00. Eight independent/read-only assignments.
+Authorized configuration: Muse Spark 1.3 with reasoning.effort=xhigh.
