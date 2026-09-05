@@ -184,6 +184,64 @@ const finalCrashTipDeg = Math.max(
   Math.abs(finalCrashEuler.roll)
 ) * 180 / Math.PI;
 
+function prepareSameSurfaceGripProbe(sim: Simulation, speedMs: number) {
+  const body = sim.vehicle.rigidBody;
+  body.position = PhysicsMath.vec3(0, config.centerOfGravityHeight, 0);
+  body.orientation = PhysicsMath.quatFromEuler(0, 0, 0);
+  body.velocity = PhysicsMath.vec3(0, 0, speedMs);
+  body.angularVelocity = PhysicsMath.vec3(0, 0, 0);
+
+  // Normalize only the rolling speed. Deliberately preserve suspension state,
+  // tire relaxation state, temperature, wear, powertrain and driver-aid state.
+  sim.vehicle.wheels.forEach((wheel) => {
+    wheel.angularVelocity = speedMs / config.wheelRadius;
+  });
+
+  // Give the coupled suspension/contact model one second to settle on the exact
+  // same racing-line material before asking it for cornering authority.
+  for (let i = 0; i < 120; i++) sim.stepExplicit(neutral, 1);
+}
+
+function measureSameSurfaceGrip(sim: Simulation) {
+  let lateralForceSumN = 0;
+  let normalForceSumN = 0;
+  let samples = 0;
+  for (let i = 0; i < 120; i++) {
+    const state = sim.stepExplicit({ ...neutral, steer: 0.06 }, 1);
+    if (i >= 60) {
+      lateralForceSumN += Math.abs(
+        state.wheels.reduce((sum, wheel) => sum + wheel.forceVectorLat, 0)
+      );
+      normalForceSumN += state.wheels.reduce((sum, wheel) => sum + wheel.forceVectorNorm, 0);
+      samples++;
+    }
+  }
+  return {
+    meanLateralForceN: lateralForceSumN / Math.max(1, samples),
+    meanNormalForceN: normalForceSumN / Math.max(1, samples),
+  };
+}
+
+const freshGripSim = new Simulation(config);
+freshGripSim.reset(0, 0, 0);
+for (let i = 0; i < 360; i++) freshGripSim.stepExplicit(neutral, 1);
+prepareSameSurfaceGripProbe(freshGripSim, 20);
+const freshGrip = measureSameSurfaceGrip(freshGripSim);
+
+prepareSameSurfaceGripProbe(crashSim, 20);
+const recoveredGrip = measureSameSurfaceGrip(crashSim);
+const recoveredGripRatio = recoveredGrip.meanLateralForceN /
+  Math.max(1, freshGrip.meanLateralForceN);
+
+assert(
+  recoveredGrip.meanNormalForceN > freshGrip.meanNormalForceN * 0.90,
+  `post-crash tire load did not recover on the same surface: recovered=${recoveredGrip.meanNormalForceN.toFixed(0)} N fresh=${freshGrip.meanNormalForceN.toFixed(0)} N`
+);
+assert(
+  recoveredGripRatio > 0.85,
+  `post-crash cornering authority stayed low on the same surface: ratio=${recoveredGripRatio.toFixed(3)}`
+);
+
 console.log(JSON.stringify({
   uprightSpin: {
     maxAngularSpeedRadS: maxSpinAngularSpeed,
@@ -208,6 +266,13 @@ console.log(JSON.stringify({
     finalSurfaceFriction: finalCrashState.wheels.map((wheel) => wheel.surfaceFriction),
     finalTireTemperatureC: finalCrashState.wheels.map((wheel) => wheel.temperature),
     finalTireWearPercent: finalCrashState.wheels.map((wheel) => wheel.tireWearPercent),
+    sameSurfaceGrip: {
+      freshMeanLateralForceN: freshGrip.meanLateralForceN,
+      recoveredMeanLateralForceN: recoveredGrip.meanLateralForceN,
+      recoveredGripRatio,
+      freshMeanNormalForceN: freshGrip.meanNormalForceN,
+      recoveredMeanNormalForceN: recoveredGrip.meanNormalForceN,
+    },
     nonFiniteSamples: crashNonFinite,
   },
   status: 'passed',
