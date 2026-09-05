@@ -1,0 +1,25 @@
+name: Wheel spacing diagnostic
+
+on:
+  push:
+    branches:
+      - physics/chassis-suspension-coupling-spinout
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-package-lock --no-audit --no-fund
+      - name: Measure bundled M5 and wheel scale
+        run: npm run test:visual-scale
+      - name: Measure static vehicle wheel centers
+        run: |
+          npx tsx -e "import {Simulation} from './src/physics/Simulation.ts'; import {DEFAULT_VEHICLE_CONFIG} from './src/physics/vehiclePresets.ts'; import {BMW_M5_2025_OVERRIDES} from './src/physics/m5G90.ts'; const c={...DEFAULT_VEHICLE_CONFIG,...BMW_M5_2025_OVERRIDES}; const s=new Simulation(c as any); s.reset(); for(let i=0;i<240;i++) s.stepExplicit({throttle:0,brake:0,steer:0,handbrake:false,shiftUp:false,shiftDown:false},1); const st=s.vehicle.getState(); console.log(JSON.stringify({trackFront:c.trackWidthFront,trackRear:c.trackWidthRear,wheelRadius:c.wheelRadius,wheels:st.wheels.map(w=>({id:w.id,hub:(w as any).hubWorldPos,local:w.localPos,kin:(w as any).kinematicHubLocalPos}))},null,2));"
