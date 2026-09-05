@@ -565,18 +565,20 @@ export class Vehicle {
       // kinematics. This targets only the measured near-zero pitch-rebound artifact.
       const contactWorld = suspState.contactPointWorld;
 
-      // Tire slip must be evaluated at the exact same world-space contact patch
-      // where the resulting shear force is applied. The old shortcut used a fixed
-      // body-space point (mount X/Z and -CG height). Once the chassis rolled or
-      // pitched, that shortcut no longer transformed back to contactWorld, so the
-      // tire saw the velocity of one lever arm while its force acted through
-      // another. The mismatch is turn-dependent and can inject a false yaw moment
-      // precisely when suspension load transfer is largest.
-      const contactArmWorld = PhysicsMath.vec3Sub(contactWorld, this.rigidBody.position);
-      const contactPointBody = PhysicsMath.quatInverseRotateVec3(
-        this.rigidBody.orientation,
-        contactArmWorld
-      );
+      // This reduced suspension has one independent unsprung DOF: vertical hub
+      // motion. In X/Z the hub and contact patch are constrained to the chassis
+      // hardpoint every fixed step (SuspensionSystem writes contactPointWorld.x/z
+      // from hardpointWorld.x/z). Their planar velocity must therefore be the
+      // hardpoint's rigid-body point velocity.
+      //
+      // contactWorld is a hybrid coordinate: X/Z follow the chassis support while
+      // Y is road-constrained. It is not a material point of the rigid body.
+      // Treating its instantaneous body coordinates as rigid invents an extra
+      // roll/pitch-rate contribution to tire slip during load-transfer transients.
+      const vSupportBody = this.rigidBody.getPointVelocityBody(hpBody);
+
+      // Preserve the existing brake-held near-stop longitudinal proxy. Normal
+      // cornering uses the support's planar velocity above.
       const hubWorld = PhysicsMath.vec3(
         contactWorld.x,
         suspState.hubPositionWorldY,
@@ -584,16 +586,15 @@ export class Vehicle {
       );
       const hubArmWorld = PhysicsMath.vec3Sub(hubWorld, this.rigidBody.position);
       const hubPointBody = PhysicsMath.quatInverseRotateVec3(this.rigidBody.orientation, hubArmWorld);
-      const vContactBody = this.rigidBody.getPointVelocityBody(contactPointBody);
       const vHubBody = this.rigidBody.getPointVelocityBody(hubPointBody);
 
       // Rotate velocity into wheel heading coordinate frame (steer angle about Y)
       const steer = wheel.steerAngle;
       const cosS = Math.cos(steer);
       const sinS = Math.sin(steer);
-      const vxContact = vContactBody.x * sinS + vContactBody.z * cosS;
+      const vxContact = vSupportBody.x * sinS + vSupportBody.z * cosS;
       const vxHub = vHubBody.x * sinS + vHubBody.z * cosS;
-      const vyWheel = vContactBody.x * cosS - vContactBody.z * sinS;
+      const vyWheel = vSupportBody.x * cosS - vSupportBody.z * sinS;
       const hydraulicBrakeTorque = brakeTorques.hydraulicTorques[i];
       const handbrakeTorque = brakeTorques.handbrakeTorques[i];
       const brakeRequest = Math.max(0, hydraulicBrakeTorque) + Math.max(0, handbrakeTorque);
