@@ -564,10 +564,18 @@ export class Vehicle {
       // point fixed at road height. Lateral slip keeps the established contact-patch
       // kinematics. This targets only the measured near-zero pitch-rebound artifact.
       const contactWorld = suspState.contactPointWorld;
-      const contactPointBody = PhysicsMath.vec3(
-        hpBody.x,
-        -this.config.centerOfGravityHeight,
-        hpBody.z
+
+      // Tire slip must be evaluated at the exact same world-space contact patch
+      // where the resulting shear force is applied. The old shortcut used a fixed
+      // body-space point (mount X/Z and -CG height). Once the chassis rolled or
+      // pitched, that shortcut no longer transformed back to contactWorld, so the
+      // tire saw the velocity of one lever arm while its force acted through
+      // another. The mismatch is turn-dependent and can inject a false yaw moment
+      // precisely when suspension load transfer is largest.
+      const contactArmWorld = PhysicsMath.vec3Sub(contactWorld, this.rigidBody.position);
+      const contactPointBody = PhysicsMath.quatInverseRotateVec3(
+        this.rigidBody.orientation,
+        contactArmWorld
       );
       const hubWorld = PhysicsMath.vec3(
         contactWorld.x,
