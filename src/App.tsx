@@ -658,8 +658,8 @@ export default function App() {
       }
       const runtime = trackRuntimeRef.current;
       provingGroundObjectsRef.current.forEach((object) => { object.visible = false; });
-      scene.background = new THREE.Color(0xb9b29a);
-      scene.fog = new THREE.FogExp2(0xb9b29a, 0.00072);
+      scene.background = new THREE.Color(0x7897aa);
+      scene.fog = new THREE.FogExp2(0x7897aa, 0.00135);
       drivingEnvironmentRef.current = 'showcase';
       setPhysicsSurface(engine, runtime.surfaceProvider);
       envManagerRef.current?.clearSkidMarks();
