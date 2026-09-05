@@ -53,9 +53,110 @@ function usefulSteerInput(speedMs: number): number {
   return PhysicsMath.clamp(centerAngle / config.maxSteerAngle, 0.008, 0.12);
 }
 
+type ContactKinematicProbe = {
+  maxProductionErrorMs: number;
+  maxLegacyShortcutErrorMs: number;
+  samples: number;
+};
+
+/**
+ * Intercept the velocity pair Vehicle actually passes into each wheel. At speed,
+ * that pair must come from the same physical contact patch used for force
+ * application. This directly guards the rolled/pitched chassis lever-arm bug:
+ * the historical fixed body-space shortcut diverges from the real contact point
+ * as load transfer rotates the body.
+ */
+function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
+  const probe: ContactKinematicProbe = {
+    maxProductionErrorMs: 0,
+    maxLegacyShortcutErrorMs: 0,
+    samples: 0,
+  };
+  const hardpoints = sim.vehicle.getHardpointsBody();
+
+  sim.vehicle.wheels.forEach((wheel, index) => {
+    const downstreamUpdate = wheel.update.bind(wheel);
+    wheel.update = ((
+      longitudinalVelocity: number,
+      lateralVelocity: number,
+      verticalLoad: number,
+      camberDeg: number,
+      driveTorque: number,
+      hydraulicBrakeTorque: number,
+      handbrakeTorque: number,
+      surfaceFriction: number,
+      rollingResistance: number,
+      dt: number,
+      reflectedDrivelineInertia: number = 0
+    ) => {
+      const rigid = sim.vehicle.rigidBody;
+      const contactWorld = sim.vehicle.suspension.states[index].contactPointWorld;
+      const contactArmWorld = PhysicsMath.vec3Sub(contactWorld, rigid.position);
+      const actualPointBody = PhysicsMath.quatInverseRotateVec3(
+        rigid.orientation,
+        contactArmWorld
+      );
+      const actualVelocityBody = rigid.getPointVelocityBody(actualPointBody);
+
+      const steer = wheel.steerAngle;
+      const sinS = Math.sin(steer);
+      const cosS = Math.cos(steer);
+      const expectedLongitudinal =
+        actualVelocityBody.x * sinS + actualVelocityBody.z * cosS;
+      const expectedLateral =
+        actualVelocityBody.x * cosS - actualVelocityBody.z * sinS;
+
+      probe.maxProductionErrorMs = Math.max(
+        probe.maxProductionErrorMs,
+        Math.hypot(
+          longitudinalVelocity - expectedLongitudinal,
+          lateralVelocity - expectedLateral
+        )
+      );
+
+      const hp = hardpoints[index];
+      const legacyPointBody = PhysicsMath.vec3(
+        hp.x,
+        -config.centerOfGravityHeight,
+        hp.z
+      );
+      const legacyVelocityBody = rigid.getPointVelocityBody(legacyPointBody);
+      const legacyLongitudinal =
+        legacyVelocityBody.x * sinS + legacyVelocityBody.z * cosS;
+      const legacyLateral =
+        legacyVelocityBody.x * cosS - legacyVelocityBody.z * sinS;
+      probe.maxLegacyShortcutErrorMs = Math.max(
+        probe.maxLegacyShortcutErrorMs,
+        Math.hypot(
+          legacyLongitudinal - expectedLongitudinal,
+          legacyLateral - expectedLateral
+        )
+      );
+      probe.samples++;
+
+      return downstreamUpdate(
+        longitudinalVelocity,
+        lateralVelocity,
+        verticalLoad,
+        camberDeg,
+        driveTorque,
+        hydraulicBrakeTorque,
+        handbrakeTorque,
+        surfaceFriction,
+        rollingResistance,
+        dt,
+        reflectedDrivelineInertia
+      );
+    }) as typeof wheel.update;
+  });
+
+  return probe;
+}
+
 function run(speedKmh: number, direction: 1 | -1) {
   const initialSpeedMs = speedKmh / 3.6;
   const sim = makeRollingM5(initialSpeedMs);
+  const contactProbe = installContactKinematicProbe(sim);
   const targetSteer = usefulSteerInput(initialSpeedMs) * direction;
   const rampSteps = Math.round(0.35 / DT);
   const holdSteps = Math.round(1.50 / DT);
@@ -117,6 +218,9 @@ function run(speedKmh: number, direction: 1 | -1) {
     peakRearSlipDeg,
     minWheelLoadN,
     releasePeakYawDegS,
+    maxContactKinematicErrorMs: contactProbe.maxProductionErrorMs,
+    maxLegacyContactShortcutErrorMs: contactProbe.maxLegacyShortcutErrorMs,
+    contactKinematicSamples: contactProbe.samples,
   };
 }
 
@@ -144,6 +248,12 @@ for (const speedKmh of SPEEDS_KMH) {
       `${speedKmh} km/h turn implausibly unloaded a wheel: ${row.minWheelLoadN.toFixed(0)} N`);
     assert(row.releasePeakYawDegS < 6,
       `${speedKmh} km/h yaw failed to settle after steering release: ${row.releasePeakYawDegS.toFixed(1)} deg/s`);
+    assert(row.contactKinematicSamples > 100,
+      `${speedKmh} km/h contact kinematic probe did not collect enough samples`);
+    assert(row.maxLegacyContactShortcutErrorMs > 0.001,
+      `${speedKmh} km/h maneuver did not exercise the rolled/pitched contact-point distinction`);
+    assert(row.maxContactKinematicErrorMs < 1e-6,
+      `${speedKmh} km/h tire slip velocity was evaluated at a different point than force application: ${row.maxContactKinematicErrorMs.toFixed(6)} m/s`);
   }
 
   assert(mirrorError(left.peakYawDegS, right.peakYawDegS, 2) < 0.15,
