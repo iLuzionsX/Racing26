@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectContext, validatePatchScope, AGENT_SCOPE } from './policy.mjs';
 import { parseMuseOutput } from './output.mjs';
-import { OpenCodeZenClient, MUSE_MODEL, ZEN_ENDPOINT } from './zen.mjs';
+import { OpenCodeZenClient, MUSE_MODEL, MUSE_REASONING_EFFORT, ZEN_ENDPOINT } from './zen.mjs';
 
 function usage() {
   return `Muse Spark delegated coding agent\n\nUsage:\n  node scripts/muse-agent/run.mjs --task "Improve low-speed steering realism"\n  node scripts/muse-agent/run.mjs --task-file .github/muse-task.txt\n  node scripts/muse-agent/run.mjs --dry-run --task "Audit M5 braking behavior"\n\nOptions:\n  --task <text>       Delegated objective\n  --task-file <path>  Read objective from a UTF-8 file\n  --dry-run           Show scope/context without calling OpenCode Zen\n  --no-save           Do not persist the result artifact\n  --help              Show this help\n`;
@@ -120,6 +120,8 @@ async function main() {
     status: validation.ok ? 'completed' : 'rejected_patch',
     task,
     model: response.model || MUSE_MODEL,
+    requested_reasoning_effort: MUSE_REASONING_EFFORT,
+    response_reasoning_effort: response.reasoningEffort,
     endpoint: ZEN_ENDPOINT,
     usage: response.usage,
     context: { bytes: context.totalBytes, files: context.files.map(file => file.path) },
@@ -130,6 +132,9 @@ async function main() {
   const artifactPath = args.save ? saveArtifact(rootDir, artifact) : null;
   console.log(JSON.stringify({
     status: artifact.status,
+    model: response.model || MUSE_MODEL,
+    requested_reasoning_effort: MUSE_REASONING_EFFORT,
+    response_reasoning_effort: response.reasoningEffort,
     summary: modelResult.summary,
     proposed_files: modelResult.files_proposed_for_change,
     patch_paths: validation.paths,
