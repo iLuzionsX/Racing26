@@ -410,6 +410,10 @@ export class Vehicle {
 
     // 2. Suspension ground clearance & solve 4-corner displacements and normal loads
     const hardpointsBody = this.getHardpointsBody();
+    // The world-vertical unsprung sliders need a body-fixed X/Z support plane.
+    // At nominal ride height the wheel center sits wheelRadius above the road while
+    // the CG sits centerOfGravityHeight above it.
+    const planarHubBodyY = this.config.wheelRadius - this.config.centerOfGravityHeight;
 
     const cornerCfgFront: SuspensionCornerConfig = {
       restLength: this.config.suspensionRestLength,
@@ -454,7 +458,8 @@ export class Vehicle {
       this.config.antiRollCrossCoupling,
       this.config.wheelRadius,
       this.config.tireVerticalStiffness,
-      dt
+      dt,
+      planarHubBodyY
     );
 
     // 3. Aerodynamics (Front & Rear Downforce, Drag, Diffuser Suction)
@@ -566,16 +571,20 @@ export class Vehicle {
       const contactWorld = suspState.contactPointWorld;
 
       // This reduced suspension has one independent unsprung DOF: vertical hub
-      // motion. In X/Z the hub and contact patch are constrained to the chassis
-      // hardpoint every fixed step (SuspensionSystem writes contactPointWorld.x/z
-      // from hardpointWorld.x/z). Their planar velocity must therefore be the
-      // hardpoint's rigid-body point velocity.
+      // motion. In X/Z the hub and contact patch are constrained to a body-fixed
+      // support line through the nominal wheel-center plane. Their planar velocity
+      // must therefore be that support point's rigid-body velocity.
       //
       // contactWorld is a hybrid coordinate: X/Z follow the chassis support while
       // Y is road-constrained. It is not a material point of the rigid body.
       // Treating its instantaneous body coordinates as rigid invents an extra
       // roll/pitch-rate contribution to tire slip during load-transfer transients.
-      const vSupportBody = this.rigidBody.getPointVelocityBody(hpBody);
+      const planarSupportBody = PhysicsMath.vec3(
+        hpBody.x,
+        planarHubBodyY,
+        hpBody.z
+      );
+      const vSupportBody = this.rigidBody.getPointVelocityBody(planarSupportBody);
 
       // Preserve the existing brake-held near-stop longitudinal proxy. Normal
       // cornering uses the support's planar velocity above.
