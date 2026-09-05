@@ -1,4 +1,4 @@
-name: Muse Spark 1.3 max chassis suspension pass
+name: Muse Spark max chassis investigation
 
 on:
   push:
@@ -7,12 +7,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
-
-concurrency:
-  group: muse-chassis-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   probe:
@@ -24,66 +18,13 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/muse-agent/test.mjs
-      - name: Probe Muse Spark 1.3 max
+      - name: Probe exact Muse configuration
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-        run: node scripts/muse-agent/run.mjs --task "CONFIGURATION PROBE ONLY. Return JSON with summary config-probe, patch null, no proposed files, no tests, and no recommendations."
-      - name: Post configuration probe to PR 127
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
+        run: node scripts/muse-agent/run.mjs --task "Configuration probe only. Return valid JSON with summary config-probe and patch null."
+      - name: Require Spark 1.3 max
         run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const files = fs.existsSync('.muse/artifacts')
-            ? fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort()
-            : [];
-          let payload = { status: 'no-artifact' };
-          if (files.length) {
-            const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
-            payload = {
-              status: a.status,
-              model: a.model,
-              requested_reasoning_effort: a.requested_reasoning_effort,
-              response_reasoning_effort: a.response_reasoning_effort,
-              summary: a.result?.summary ?? ''
-            };
-          }
-          const body = `<!-- muse-chassis-probe:${process.env.RUN_ID} -->
-### Muse configuration probe
-\`\`\`json
-${JSON.stringify(payload, null, 2)}
-\`\`\``;
-          const res = await fetch('https://api.github.com/repos/iLuzionsX/Racing26/issues/127/comments', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({body})
-          });
-          if (!res.ok) throw new Error(`Failed to post probe: ${res.status} ${(await res.text()).slice(0,500)}`);
-          NODE
-      - name: Verify actual provider configuration
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const files = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort();
-          if (!files.length) throw new Error('No Muse artifact');
-          const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
-          console.log(JSON.stringify({
-            model: a.model,
-            requested_reasoning_effort: a.requested_reasoning_effort,
-            response_reasoning_effort: a.response_reasoning_effort,
-            status: a.status
-          }, null, 2));
-          if (a.model !== 'muse-spark-1.3-contributor-free') throw new Error('Unexpected model: ' + a.model);
-          if (a.requested_reasoning_effort !== 'max') throw new Error('Request did not use max');
-          if (a.response_reasoning_effort !== 'max') throw new Error('Provider did not confirm max: ' + a.response_reasoning_effort);
-          NODE
+          node -e "const fs=require('fs');const p=fs.readdirSync('.muse/artifacts').filter(x=>x.endsWith('.json')).sort().pop();if(!p)throw Error('missing Muse artifact');const a=JSON.parse(fs.readFileSync('.muse/artifacts/'+p,'utf8'));console.log(JSON.stringify({model:a.model,requested:a.requested_reasoning_effort,response:a.response_reasoning_effort,status:a.status}));if(a.model!=='muse-spark-1.3-contributor-free'||a.requested_reasoning_effort!=='max'||a.response_reasoning_effort!=='max')throw Error('Muse Spark 1.3 max was not confirmed by provider');"
 
   investigate:
     needs: probe
@@ -100,96 +41,19 @@ ${JSON.stringify(payload, null, 2)}
         with:
           node-version: '22'
       - run: node scripts/muse-agent/test.mjs
-      - name: Run focused chassis investigation
+      - name: Run Muse chassis specialist
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-        run: |
-          BASE_TASK="$(cat .github/muse-task.txt)"
-          case "${{ matrix.agent }}" in
-            1) FOCUS="CHASSIS/UNSPRUNG COUPLING. Trace physical body, hub and contact states for frame divergence, double transforms, stale transforms, or lateral decoupling." ;;
-            2) FOCUS="SUSPENSION KINEMATICS. Audit travel/roll/heave/hardpoint/body-frame transforms, bump stops and ARB behavior under combined roll+yaw." ;;
-            3) FOCUS="NORMAL LOAD / TRANSFER. Audit per-wheel Fz, wheel unloading/lift, transfer chronology, clamping, and yaw impulses from transient load discontinuities." ;;
-            4) FOCUS="FORCE APPLICATION. Audit tyre/contact force directions, coordinate frames, application points and moment arms for double-counting or abrupt sign/frame changes." ;;
-            5) FOCUS="INTEGRATION / ORDERING. Audit fixed-step chronology, state mutation, suspension update order and render interpolation versus actual physics state." ;;
-            6) FOCUS="SURFACE / CONTACT. Audit road normal/elevation/contact sampling in turns and kerb/runoff transitions after the jitter fix; seek physically meaningful discontinuities." ;;
-            7) FOCUS="REPRO / REGRESSION. Build the strongest deterministic falsifier using chassis/hub/contact relative geometry, loads, yaw, sideslip and lateral G. Propose test patch if useful." ;;
-            8) FOCUS="ADVERSARIAL INTEGRATOR. Challenge the user's apparent chassis-slip diagnosis, review interactions with PRs #124/#125/#126, rank mechanisms, and patch only a proven defect." ;;
-          esac
-          node scripts/muse-agent/run.mjs --task "Agent ${{ matrix.agent }} of 8. $FOCUS
-
-$BASE_TASK"
-      - name: Verify agent provider configuration
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const files = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort();
-          if (!files.length) throw new Error('No Muse artifact');
-          const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
-          if (a.model !== 'muse-spark-1.3-contributor-free') throw new Error('Unexpected model: ' + a.model);
-          if (a.requested_reasoning_effort !== 'max' || a.response_reasoning_effort !== 'max') {
-            throw new Error('Muse reasoning effort was not max');
-          }
-          NODE
-      - name: Post scoped report to PR 127
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
           AGENT_ID: ${{ matrix.agent }}
-          RUN_ID: ${{ github.run_id }}
         run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const files = fs.existsSync('.muse/artifacts')
-            ? fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort()
-            : [];
-          let body;
-          if (!files.length) {
-            body = `<!-- muse-chassis-agent:${process.env.AGENT_ID}:${process.env.RUN_ID} -->
-Muse chassis agent ${process.env.AGENT_ID} produced no artifact.`;
-          } else {
-            const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
-            const payload = {
-              agent: Number(process.env.AGENT_ID),
-              model: a.model,
-              requested_reasoning_effort: a.requested_reasoning_effort,
-              response_reasoning_effort: a.response_reasoning_effort,
-              status: a.status,
-              summary: a.result?.summary ?? '',
-              findings: a.result?.findings ?? [],
-              files_inspected: a.result?.files_inspected ?? [],
-              files_proposed_for_change: a.result?.files_proposed_for_change ?? [],
-              patch: a.result?.patch ?? null,
-              tests_to_run: a.result?.tests_to_run ?? [],
-              risks: a.result?.risks ?? [],
-              assumptions: a.result?.assumptions ?? [],
-              unresolved_issues: a.result?.unresolved_issues ?? []
-            };
-            let json = JSON.stringify(payload, null, 2);
-            if (json.length > 59000) {
-              payload.patch = payload.patch ? `[patch omitted from comment because it was ${payload.patch.length} characters; artifact retained]` : null;
-              json = JSON.stringify(payload, null, 2);
-            }
-            body = `<!-- muse-chassis-agent:${process.env.AGENT_ID}:${process.env.RUN_ID} -->
-### Muse chassis agent ${process.env.AGENT_ID}
-\`\`\`json
-${json.slice(0, 62000)}
-\`\`\``;
-          }
-          const res = await fetch('https://api.github.com/repos/iLuzionsX/Racing26/issues/127/comments', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({body})
-          });
-          if (!res.ok) throw new Error(`Failed to post PR report: ${res.status} ${(await res.text()).slice(0,500)}`);
-          NODE
-      - name: Upload report
+          node scripts/muse-agent/run.mjs --task "Agent $AGENT_ID of 8. Read .github/muse-task.txt. Execute assignment number $AGENT_ID from that task exactly. Inspect the current branch and return the required evidence, falsifier, tests, risks, and a minimal unified diff only if a concrete defect is proven."
+      - name: Require Spark 1.3 max
+        run: |
+          node -e "const fs=require('fs');const p=fs.readdirSync('.muse/artifacts').filter(x=>x.endsWith('.json')).sort().pop();if(!p)throw Error('missing Muse artifact');const a=JSON.parse(fs.readFileSync('.muse/artifacts/'+p,'utf8'));console.log(JSON.stringify({agent:process.env.AGENT_ID,model:a.model,requested:a.requested_reasoning_effort,response:a.response_reasoning_effort,status:a.status}));if(a.model!=='muse-spark-1.3-contributor-free'||a.requested_reasoning_effort!=='max'||a.response_reasoning_effort!=='max')throw Error('Muse Spark 1.3 max was not confirmed by provider');"
+        env:
+          AGENT_ID: ${{ matrix.agent }}
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: muse-chassis-agent-${{ matrix.agent }}
           path: .muse/artifacts/
