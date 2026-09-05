@@ -27,5 +27,5 @@ Every report must include:
 
 Do not claim browser driving, tests, measurements, or runtime observations you did not actually perform.
 
-Wave-1 trigger: 2026-09-04T20:36-04:00. Read-only diagnosis; baseline remains c29e33d8f05f21d85c85a79947c51adcf0d67e50.
-Retarget trigger: run the same read-only wave against the superseding main-bound PR.
+Authorized configuration update: Muse Spark 1.3 with reasoning.effort=xhigh.
+Wave-1 xhigh trigger: 2026-09-04T21:00-04:00. Eight independent/read-only assignments.
