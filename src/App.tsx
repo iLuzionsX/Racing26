@@ -232,6 +232,8 @@ export default function App() {
         keysDownRef.current = {};
         setActiveKeys({});
         digitalSteerInputRef.current = 0;
+        physicsEngine.simulation.resetDigitalSteeringInput(0);
+        physicsEngine.simulation.resetAnalogSteeringInput(0);
         mouseSteerInputRef.current = 0;
         touchSteerInputRef.current = 0;
         touchSteerActiveRef.current = false;
@@ -583,7 +585,8 @@ export default function App() {
     steeringInputModeRef.current = mode;
     setSteeringInputMode(mode);
     digitalSteerInputRef.current = 0;
-    analogSteerAppliedRef.current = 0;
+    physicsEngineRef.current?.simulation.resetDigitalSteeringInput(0);
+    physicsEngineRef.current?.simulation.resetAnalogSteeringInput(0);
     mouseSteerInputRef.current = 0;
     if (typeof window !== 'undefined') window.localStorage.setItem(STEERING_INPUT_STORAGE_KEY, mode);
   };
