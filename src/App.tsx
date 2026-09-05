@@ -575,8 +575,8 @@ export default function App() {
       // A fresh wheel grab owns steering immediately and must not inherit stale
       // digital or mouse state from another input source.
       digitalSteerInputRef.current = 0;
-      physicsEngine.simulation.resetDigitalSteeringInput(0);
-      physicsEngine.simulation.resetAnalogSteeringInput(0);
+      physicsEngineRef.current?.simulation.resetDigitalSteeringInput(0);
+      physicsEngineRef.current?.simulation.resetAnalogSteeringInput(0);
       mouseSteerInputRef.current = 0;
     }
   };
