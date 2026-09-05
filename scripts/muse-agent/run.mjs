@@ -138,6 +138,7 @@ async function main() {
     summary: modelResult.summary,
     proposed_files: modelResult.files_proposed_for_change,
     patch_paths: validation.paths,
+    result: modelResult,
     artifact: artifactPath,
     applied: false,
   }, null, 2));
