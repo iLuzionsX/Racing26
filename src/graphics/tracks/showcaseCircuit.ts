@@ -1,27 +1,33 @@
 import * as THREE from 'three';
 import type { ISurfaceProvider, SurfaceSample } from '../../physics/SurfaceProvider';
-import { disposeShowcaseGroup, finalizeInstancedMesh, finalizeStaticMesh } from './showcase/trackPerformance';
-import { createShowcaseLightingRig, isMobileGpu } from './showcase/showcaseLighting';
-import { createShowcaseAtmosphere } from './showcase/showcaseAtmosphere';
-import { createShowcaseSurfaceMaterials } from './showcase/showcaseSurfaceMaterials';
-import { buildShowcaseRoadDetails } from './showcase/showcaseRoadDetails';
-import { buildBrakingBoardFamily, buildFictionalBanner, buildMarshalPost, buildTimingSectorObjects } from './showcase/tracksideProps';
-import { buildCrowdCluster, makeSeededRandom, makeSeatedGrid } from './showcase/crowd';
-import { tryComposeKenneyVenueGroup } from './showcase/kenneyVenueAssets';
-import { buildTerrainComposition } from './showcase/terrainComposition';
-import { SHOWCASE_KENNEY_ASSET_IDS } from './showcase/showcaseArtBudget';
-import { buildTrackEdgePresentation } from './showcase/realisticCurbs';
 
-export const TRACK_CENTER_X = 560;
-export const TRACK_WIDTH_M = 20;
+/**
+ * Racing26 runtime port of the original iLuzionsX/racerrhi APEX / Côte d'Azur circuit.
+ *
+ * Source geometry is intentionally kept faithful to racerrhi:
+ * - the same 13 closed Catmull-Rom control points
+ * - the same 15 m asphalt ribbon
+ * - the same 33 m gravel shelf
+ * - the same kerb / edge-line offsets
+ * - the same ±16 m continuous guardrail placement
+ * - coastal terrain, ocean, ridgelines, pit buildings and track furniture
+ *
+ * The M5 physics itself remains Racing26. The surface provider below is derived from
+ * the exact same path/width constants used to render the circuit so a crash cannot
+ * put the tires on invisible low-grip terrain while the player still sees asphalt.
+ */
+
+export const TRACK_CENTER_X = 0;
+export const TRACK_WIDTH_M = 15;
 export const TRACK_HALF_WIDTH_M = TRACK_WIDTH_M / 2;
-export const CURB_WIDTH_M = 1.25;
-export const RUNOFF_WIDTH_M = 18;
-export const OUTER_RUNOFF_M = TRACK_HALF_WIDTH_M + CURB_WIDTH_M + RUNOFF_WIDTH_M;
-export const BARRIER_OFFSET_M = OUTER_RUNOFF_M + 2.5;
-export const TERRAIN_BERM_HALF_WIDTH_M = 82;
-export const PATH_SAMPLES = 900;
-export const SHOWCASE_SPAWN_U = 0.018;
+export const CURB_WIDTH_M = 0.9;
+export const RUNOFF_WIDTH_M = 8.1;
+export const OUTER_RUNOFF_M = 16.5;
+export const BARRIER_OFFSET_M = 16;
+export const TERRAIN_BERM_HALF_WIDTH_M = 68;
+export const PATH_SAMPLES = 1400;
+export const SHOWCASE_SPAWN_U = 0;
+export const RACERRHI_RECOVERY_LIMIT_M = 14.5;
 
 export interface ShowcaseSpawn {
   x: number;
@@ -48,70 +54,38 @@ export interface TrackSample {
   distance: number;
 }
 
-function gaussian(u: number, center: number, width: number): number {
-  let d = u - center;
-  if (d > 0.5) d -= 1;
-  if (d < -0.5) d += 1;
-  return Math.exp(-(d * d) / Math.max(1e-6, width * width));
+export function bankingAt(_u: number): number {
+  return 0;
 }
 
-export function bankingAt(u: number): number {
-  // Deliberately progressive. The original circuit used ~14 degree banking with
-  // high-frequency sign changes; that twisted the ribbon and made the heavy M5
-  // react to the road instead of the driver. This keeps the spectacle while
-  // limiting both amplitude and transition rate.
-  const bowl = 0.09 * gaussian(u, 0.20, 0.09);
-  const crest = 0.035 * gaussian(u, 0.40, 0.075);
-  const technical = -0.055 * gaussian(u, 0.66, 0.075);
-  const essesWindow = gaussian(u, 0.80, 0.13);
-  const esses = Math.sin((u - 0.72) * Math.PI * 4) * 0.025 * essesWindow;
-  return bowl + crest + technical + esses;
-}
+const RACERRHI_CONTROL_POINTS: ReadonlyArray<readonly [number, number, number]> = [
+  [-225, 13, -200],
+  [-225, 13, 50],
+  [-185, 16, 245],
+  [-55, 22, 325],
+  [100, 27, 265],
+  [155, 24, 115],
+  [290, 22, 65],
+  [300, 20, -65],
+  [170, 18, -110],
+  [85, 14, -225],
+  [185, 11, -320],
+  [70, 11, -385],
+  [-110, 12, -345],
+];
 
-/**
- * Measured, non-self-crossing GP layout.
- *
- * The previous generated loop closed through a Catmull-Rom cusp and also crossed
- * itself, making wheel-by-wheel surface lookup ambiguous. This layout is purposely
- * simpler in topology but still has a long straight, fast bowl, high crest, flowing
- * north sector and a real slow technical corner on the southwest return.
- *
- * Dense numerical QA is enforced separately in showcaseCircuitQA.ts.
- */
 export class ShowcaseTrackPath {
   public readonly curve: THREE.CatmullRomCurve3;
   public readonly samples: TrackSample[] = [];
   public readonly lengthM: number;
 
   constructor() {
-    const raw: Array<[number, number, number]> = [
-      [-120, 2, -420],
-      [120, 2, -420],
-      [260, 4, -380],
-      [360, 7, -270],
-      [400, 11, -120],
-      [410, 15, 40],
-      [350, 20, 180],
-      [290, 24, 260],
-      [280, 27, 340],
-      [180, 29, 420],
-      [30, 30, 440],
-      [-130, 28, 420],
-      [-280, 23, 340],
-      [-360, 17, 210],
-      [-390, 12, 60],
-      [-350, 8, -90],
-      [-280, 5, -180],
-      [-330, 3, -300],
-      [-240, 2, -380],
-    ];
-
     this.curve = new THREE.CatmullRomCurve3(
-      raw.map(([x, y, z]) => new THREE.Vector3(x + TRACK_CENTER_X, y, z)),
+      RACERRHI_CONTROL_POINTS.map(([x, y, z]) => new THREE.Vector3(x, y, z)),
       true,
-      'catmullrom',
-      0.55,
+      'centripetal',
     );
+    this.curve.arcLengthDivisions = 4000;
     this.lengthM = this.curve.getLength();
 
     const worldUp = new THREE.Vector3(0, 1, 0);
@@ -122,16 +96,11 @@ export class ShowcaseTrackPath {
       const u = i / PATH_SAMPLES;
       const center = this.curve.getPointAt(u);
       const tangent = this.curve.getTangentAt(u).normalize();
-      const lateral = new THREE.Vector3().crossVectors(worldUp, tangent).normalize();
-      if (lateral.lengthSq() < 1e-8) lateral.set(1, 0, 0);
+      const lateral = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
+      if (lateral.lengthSq() < 1e-8) lateral.copy(new THREE.Vector3(1, 0, 0));
 
-      const banking = bankingAt(u);
-      const bankedLateral = lateral.clone().multiplyScalar(Math.cos(banking));
-      bankedLateral.y += Math.sin(banking);
-      bankedLateral.normalize();
-
-      let normal = new THREE.Vector3().crossVectors(tangent, bankedLateral).normalize();
-      if (normal.y < 0) normal.multiplyScalar(-1);
+      let normal = new THREE.Vector3().crossVectors(tangent, lateral).normalize();
+      if (normal.dot(worldUp) < 0) normal.multiplyScalar(-1);
 
       if (previous) distance += previous.distanceTo(center);
       previous = center;
@@ -140,9 +109,9 @@ export class ShowcaseTrackPath {
         center,
         tangent,
         lateral,
-        bankedLateral,
+        bankedLateral: lateral.clone(),
         normal,
-        banking,
+        banking: 0,
         distance,
       });
     }
@@ -159,8 +128,7 @@ export class ShowcaseTrackPath {
 
     const tangent = a.tangent.clone().lerp(b.tangent, k).normalize();
     const lateral = a.lateral.clone().lerp(b.lateral, k).normalize();
-    const bankedLateral = a.bankedLateral.clone().lerp(b.bankedLateral, k).normalize();
-    let normal = new THREE.Vector3().crossVectors(tangent, bankedLateral).normalize();
+    let normal = new THREE.Vector3().crossVectors(tangent, lateral).normalize();
     if (normal.y < 0) normal.multiplyScalar(-1);
 
     return {
@@ -168,23 +136,18 @@ export class ShowcaseTrackPath {
       center: a.center.clone().lerp(b.center, k),
       tangent,
       lateral,
-      bankedLateral,
+      bankedLateral: lateral.clone(),
       normal,
-      banking: THREE.MathUtils.lerp(a.banking, b.banking, k),
+      banking: 0,
       distance: THREE.MathUtils.lerp(a.distance, b.distance, k),
     };
   }
 
-  public closest(x: number, z: number): { sample: TrackSample; lateralOffset: number } {
+  public closest(x: number, z: number): { sample: TrackSample; lateralOffset: number; distance: number } {
     let coarseBest = 0;
     let coarseDistance = Infinity;
 
-    // Coarse center-point scan narrows the search cheaply. The final answer is
-    // deliberately projected onto a centerline segment rather than snapped to one
-    // of these samples: the suspension queries this function at 120 Hz, and a
-    // nearest-sample staircase turns smooth elevation/grade into repeated vertical
-    // impacts for the unsprung wheel masses.
-    for (let i = 0; i < PATH_SAMPLES; i += 5) {
+    for (let i = 0; i < PATH_SAMPLES; i += 6) {
       const s = this.samples[i];
       const dx = x - s.center.x;
       const dz = z - s.center.z;
@@ -199,10 +162,7 @@ export class ShowcaseTrackPath {
     let bestT = 0;
     let bestDistance = Infinity;
 
-    // Project the query onto nearby XZ centerline segments. The samples were built
-    // with getPointAt(), so interpolating the winning segment index maps directly
-    // back into sampleAt()'s normalized arc-length parameter.
-    for (let k = -14; k <= 14; k++) {
+    for (let k = -18; k <= 18; k++) {
       const i0 = (coarseBest + k + PATH_SAMPLES) % PATH_SAMPLES;
       const i1 = (i0 + 1) % PATH_SAMPLES;
       const a = this.samples[i0];
@@ -222,7 +182,6 @@ export class ShowcaseTrackPath {
       const dx = x - qx;
       const dz = z - qz;
       const d2 = dx * dx + dz * dz;
-
       if (d2 < bestDistance) {
         bestDistance = d2;
         bestSegment = i0;
@@ -235,7 +194,7 @@ export class ShowcaseTrackPath {
     const dx = x - sample.center.x;
     const dz = z - sample.center.z;
     const lateralOffset = dx * sample.lateral.x + dz * sample.lateral.z;
-    return { sample, lateralOffset };
+    return { sample, lateralOffset, distance: Math.hypot(dx, dz) };
   }
 
   public spawn(): ShowcaseSpawn {
@@ -256,9 +215,6 @@ export function getShowcasePath(): ShowcaseTrackPath {
 }
 
 export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
-  // Kept only for App reset API compatibility and QA readback. The value does NOT
-  // participate in deck selection. With a non-crossing loop, XZ lookup is pure and
-  // wheel query order cannot change the result.
   private resetElevationHint: number;
 
   constructor(private readonly path: ShowcaseTrackPath = SHOWCASE_PATH) {
@@ -276,27 +232,21 @@ export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
   public sampleSurface(x: number, z: number): SurfaceSample {
     const hit = this.path.closest(x, z);
     const s = hit.sample;
-    const lateral = hit.lateralOffset;
-    const absLateral = Math.abs(lateral);
-    const roadPoint = s.center.clone().addScaledVector(s.bankedLateral, lateral);
-    const slopePitch = Math.atan2(
-      s.tangent.y,
-      Math.max(1e-6, Math.hypot(s.tangent.x, s.tangent.z)),
-    );
+    const absLateral = Math.abs(hit.lateralOffset);
+    const horizontal = Math.max(1e-6, Math.hypot(s.tangent.x, s.tangent.z));
+    const slopePitch = Math.atan2(s.tangent.y, horizontal);
 
-    const makeSample = (
-      elevation: number,
+    const make = (
       type: SurfaceSample['type'],
       friction: number,
       rollingResistance: number,
       isKerbRumble: boolean,
-      normal = s.normal,
-      slopeRoll = s.banking,
+      elevation = s.center.y,
     ): SurfaceSample => ({
       elevation,
-      normal: { x: normal.x, y: normal.y, z: normal.z },
+      normal: { x: s.normal.x, y: s.normal.y, z: s.normal.z },
       slopePitch,
-      slopeRoll,
+      slopeRoll: 0,
       type,
       friction,
       rollingResistance,
@@ -304,90 +254,83 @@ export class ShowcaseCircuitSurfaceProvider implements ISurfaceProvider {
       isKerbRumble,
     });
 
+    // Exact racerrhi semantics: the physical kerb overlaps the outer edge of the
+    // 15 m road and is authoritative there. This ordering is deliberate.
+    if (absLateral > 7.0 && absLateral <= 8.25) {
+      return make('kerb', 0.88, 0.024, true, s.center.y + 0.045);
+    }
+
     if (absLateral <= TRACK_HALF_WIDTH_M) {
-      return makeSample(
-        roadPoint.y,
-        absLateral < 3.6 ? 'racing_line' : 'asphalt',
-        1.08,
-        0.016,
-        false,
-      );
+      return make('asphalt', 1.0, 0.015, false);
     }
 
-    if (absLateral <= TRACK_HALF_WIDTH_M + CURB_WIDTH_M) {
-      // The visible curb rises progressively from the asphalt. Match that with a
-      // short smooth physics ramp instead of a 15 mm vertical wall at the road edge:
-      // an instantaneous height step injects a high-frequency tire load spike into
-      // the 55 kg unsprung corner and reads as wheel/chassis chatter when clipping
-      // the apex. Keep the full 15 mm feedback once the tire is on the curb.
-      const intoCurbM = absLateral - TRACK_HALF_WIDTH_M;
-      const rampT = THREE.MathUtils.clamp(intoCurbM / 0.25, 0, 1);
-      const smoothRamp = rampT * rampT * (3 - 2 * rampT);
-      const curbLipM = 0.015 * smoothRamp;
-      return makeSample(roadPoint.y + curbLipM, 'kerb', 0.90, 0.024, true);
-    }
-
-    if (absLateral <= OUTER_RUNOFF_M) {
-      const beyondCurb = absLateral - TRACK_HALF_WIDTH_M - CURB_WIDTH_M;
-      const t = THREE.MathUtils.clamp(beyondCurb / RUNOFF_WIDTH_M, 0, 1);
-      const smooth = t * t * (3 - 2 * t);
-      return makeSample(
-        roadPoint.y + THREE.MathUtils.lerp(0.015, -0.35, smooth),
-        'marbles',
-        0.74,
-        0.040,
-        false,
-      );
-    }
-
-    // Outside the recovery shelf, blend toward the world floor over a long berm.
-    // This is beyond the visual barrier, but remains continuous if the player gets
-    // there instead of reproducing the original 20 m invisible cliff.
-    const blendDistance = TERRAIN_BERM_HALF_WIDTH_M - OUTER_RUNOFF_M;
-    const t = THREE.MathUtils.clamp((absLateral - OUTER_RUNOFF_M) / Math.max(1, blendDistance), 0, 1);
-    const smooth = t * t * (3 - 2 * t);
-    const innerY = roadPoint.y - 0.35;
-    const elevation = THREE.MathUtils.lerp(innerY, 0, smooth);
-    return makeSample(
-      elevation,
-      'gravel',
-      0.52,
-      0.080,
-      false,
-      new THREE.Vector3(0, 1, 0),
-      0,
-    );
+    // The 33 m gravel ribbon is visibly drawn beneath/around the asphalt. Outside
+    // that shelf the player is on coastal terrain, which is also legitimately low
+    // grip. There are no invisible low-grip bands inside the visible road.
+    return make('gravel', 0.55, 0.075, false, s.center.y - 0.09);
   }
+}
+
+function seededRandom(seed = 0x9e3779b9) {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6d2b79f5;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildNoiseTexture(kind: 'road' | 'gravel'): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const image = ctx.createImageData(256, 256);
+  const rand = seededRandom(kind === 'road' ? 0xa11ce : 0x6a7e1);
+  for (let i = 0; i < image.data.length; i += 4) {
+    const n = rand();
+    const base = kind === 'road' ? 71 + n * 34 : 130 + n * 52;
+    image.data[i] = base;
+    image.data[i + 1] = kind === 'road' ? base * 1.025 : base * 0.91;
+    image.data[i + 2] = kind === 'road' ? base * 1.02 : base * 0.71;
+    image.data[i + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(kind === 'road' ? 1 : 0.75, 28);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function buildRibbon(
   path: ShowcaseTrackPath,
+  offset: number,
   width: number,
-  verticalOffset = 0,
-  segments = 640,
-): THREE.BufferGeometry {
+  material: THREE.Material,
+  height = 0.02,
+  colorCurbs = false,
+): THREE.Mesh {
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
-  const half = width / 2;
+  const colors: number[] = [];
 
-  for (let i = 0; i <= segments; i++) {
-    const s = path.sampleAt(i / segments);
-    const left = s.center
-      .clone()
-      .addScaledVector(s.bankedLateral, half)
-      .addScaledVector(s.normal, verticalOffset);
-    const right = s.center
-      .clone()
-      .addScaledVector(s.bankedLateral, -half)
-      .addScaledVector(s.normal, verticalOffset);
-
-    positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
-    uvs.push(0, i / 8, 1, i / 8);
-
-    if (i < segments) {
-      const a = i * 2;
-      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  for (let i = 0; i <= PATH_SAMPLES; i++) {
+    const a = path.samples[i % PATH_SAMPLES];
+    for (const side of [-1, 1]) {
+      const p = a.center.clone().addScaledVector(a.lateral, offset + side * width / 2);
+      positions.push(p.x, p.y + height, p.z);
+      uvs.push(side === -1 ? 0 : width / 5, i * path.lengthM / PATH_SAMPLES / 5);
+      if (colorCurbs) {
+        const color = new THREE.Color(Math.floor(i * path.lengthM / PATH_SAMPLES / 4) % 2 ? '#ece7ce' : '#b53a25');
+        colors.push(color.r, color.g, color.b);
+      }
+    }
+    if (i < PATH_SAMPLES) {
+      const j = i * 2;
+      indices.push(j, j + 2, j + 1, j + 1, j + 2, j + 3);
     }
   }
 
@@ -395,292 +338,361 @@ function buildRibbon(
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
+  if (colorCurbs) geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
-  return geometry;
+
+  const effectiveMaterial = colorCurbs
+    ? new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.82 })
+    : material;
+  const mesh = new THREE.Mesh(geometry, effectiveMaterial);
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
-function buildTerrainBerm(path: ShowcaseTrackPath, segments = 420): THREE.BufferGeometry {
-  const laterals = [-TERRAIN_BERM_HALF_WIDTH_M, -54, -34, 0, 34, 54, TERRAIN_BERM_HALF_WIDTH_M];
+function buildContinuousRail(path: ShowcaseTrackPath, offset: number, height: number, material: THREE.Material) {
   const positions: number[] = [];
   const indices: number[] = [];
-
-  for (let i = 0; i <= segments; i++) {
-    const s = path.sampleAt(i / segments);
-    for (const lateral of laterals) {
-      const abs = Math.abs(lateral);
-      const x = s.center.x + s.lateral.x * lateral;
-      const z = s.center.z + s.lateral.z * lateral;
-      const roadY = s.center.y + s.bankedLateral.y * lateral - 0.42;
-      let y = roadY;
-      if (abs > 34) {
-        const t = THREE.MathUtils.clamp((abs - 34) / (TERRAIN_BERM_HALF_WIDTH_M - 34), 0, 1);
-        const smooth = t * t * (3 - 2 * t);
-        y = THREE.MathUtils.lerp(roadY, 0, smooth);
-      }
-      positions.push(x, y, z);
+  for (let i = 0; i <= PATH_SAMPLES; i++) {
+    const a = path.samples[i % PATH_SAMPLES];
+    const p = a.center.clone().addScaledVector(a.lateral, offset);
+    positions.push(p.x, p.y + height - 0.13, p.z, p.x, p.y + height + 0.13, p.z);
+    if (i < PATH_SAMPLES) {
+      const j = i * 2;
+      indices.push(j, j + 1, j + 2, j + 1, j + 3, j + 2);
     }
   }
-
-  const columns = laterals.length;
-  for (let i = 0; i < segments; i++) {
-    for (let j = 0; j < columns - 1; j++) {
-      const a = i * columns + j;
-      const b = a + 1;
-      const c = (i + 1) * columns + j;
-      const d = c + 1;
-      indices.push(a, b, c, b, d, c);
-    }
-  }
-
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  return geometry;
-}
-
-function trackQuaternion(sample: TrackSample): THREE.Quaternion {
-  const basis = new THREE.Matrix4().makeBasis(
-    sample.bankedLateral,
-    sample.normal,
-    sample.tangent,
-  );
-  return new THREE.Quaternion().setFromRotationMatrix(basis);
-}
-
-function makeNumberBoardTexture(text: string): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.strokeStyle = '#111827';
-  ctx.lineWidth = 8;
-  ctx.strokeRect(4, 4, 120, 120);
-  ctx.fillStyle = '#111827';
-  ctx.font = '900 54px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 64, 66);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-function addTrackAlignedBox(
-  group: THREE.Group,
-  sample: TrackSample,
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  lateralOffset: number,
-  upOffset: number,
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position
-    .copy(sample.center)
-    .addScaledVector(sample.bankedLateral, lateralOffset)
-    .addScaledVector(sample.normal, upOffset);
-  mesh.quaternion.copy(trackQuaternion(sample));
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  group.add(mesh);
-  // Circuit group is static: freeze local matrix, no visual change.
-  finalizeStaticMesh(mesh);
+  const railMaterial = (material as THREE.MeshStandardMaterial).clone();
+  railMaterial.side = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(geometry, railMaterial);
+  mesh.castShadow = mesh.receiveShadow = true;
   return mesh;
 }
 
-function addGantry(
-  group: THREE.Group,
-  sample: TrackSample,
-  metal: THREE.Material,
-  bannerMaterial: THREE.Material,
-  labelWidth = 18,
-): void {
-  const supportOffset = BARRIER_OFFSET_M + 1.4;
-  const pillarGeometry = new THREE.BoxGeometry(0.7, 8.2, 0.7);
-  const beamGeometry = new THREE.BoxGeometry(supportOffset * 2 + 1.4, 0.7, 0.85);
-  const bannerGeometry = new THREE.BoxGeometry(labelWidth, 1.7, 0.30);
+function groundHeight(path: ShowcaseTrackPath, x: number, z: number): number {
+  const hit = path.closest(x, z);
+  const base = hit.sample.center.y - 0.65;
+  const dist = hit.distance;
+  const blend = THREE.MathUtils.clamp((dist - 23) / 60, 0, 1);
+  let y = base + (
+    Math.sin(x * 0.019) * Math.cos(z * 0.023) * 4 +
+    Math.sin(z * 0.047) * 1.2
+  ) * blend;
+  y += Math.pow(Math.max(0, (x - 310) / 400), 1.6) * 110;
+  y -= Math.max(0, -x - 275) * 0.37;
+  return Math.max(-12, y);
+}
 
-  for (const side of [-1, 1]) {
-    addTrackAlignedBox(group, sample, pillarGeometry, metal, side * supportOffset, 4.1);
+function buildCoastalTerrain(path: ShowcaseTrackPath, material: THREE.Material) {
+  const geometry = new THREE.PlaneGeometry(1550, 1550, 110, 110);
+  geometry.rotateX(-Math.PI / 2);
+  const attr = geometry.attributes.position;
+  const colors: number[] = [];
+  const rand = seededRandom(0xc07eda);
+  for (let i = 0; i < attr.count; i++) {
+    const x = attr.getX(i);
+    const z = attr.getZ(i);
+    attr.setY(i, groundHeight(path, x, z));
+    const c = new THREE.Color().setHSL(0.18 + rand() * 0.025, 0.16 + rand() * 0.12, 0.30 + rand() * 0.10);
+    colors.push(c.r, c.g, c.b);
   }
-  addTrackAlignedBox(group, sample, beamGeometry, metal, 0, 8.0);
-  addTrackAlignedBox(group, sample, bannerGeometry, bannerMaterial, 0, 6.8);
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  const mat = (material as THREE.MeshStandardMaterial).clone();
+  mat.vertexColors = true;
+  const mesh = new THREE.Mesh(geometry, mat);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function makeSign(text: string, w = 10, h = 2, bg = '#172d28', fg = '#e3f0cf') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 1024, 256);
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 95px Arial';
+  ctx.fillText(text, 512, 135, 940);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }),
+  );
+}
+
+function trackObject(group: THREE.Group, path: ShowcaseTrackPath, u: number, offset: number, object: THREE.Object3D, lift = 0) {
+  const a = path.sampleAt(u);
+  object.position.copy(a.center).addScaledVector(a.lateral, offset);
+  object.position.y += lift;
+  object.rotation.y = Math.atan2(a.tangent.x, a.tangent.z);
+  group.add(object);
+  return object;
+}
+
+function addBox(
+  group: THREE.Group,
+  width: number,
+  height: number,
+  depth: number,
+  material: THREE.Material,
+  x: number,
+  y: number,
+  z: number,
+  rotation = 0,
+) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = rotation;
+  mesh.castShadow = mesh.receiveShadow = true;
+  group.add(mesh);
+  return mesh;
+}
+
+function buildForest(group: THREE.Group, path: ShowcaseTrackPath, material: THREE.Material) {
+  const rand = seededRandom(0xf0e57);
+  const placements: Array<{ x: number; y: number; z: number; s: number }> = [];
+  for (let i = 0; i < 1700 && placements.length < 470; i++) {
+    const x = -320 + rand() * 1050;
+    const z = -690 + rand() * 1400;
+    const hit = path.closest(x, z);
+    const y = groundHeight(path, x, z);
+    if (hit.distance < 24 || x < -280 || y < 2) continue;
+    placements.push({ x, y, z, s: 4 + rand() * 6 });
+  }
+
+  const trunkGeo = new THREE.CylinderGeometry(0.12, 0.20, 1, 5);
+  const crownGeo = new THREE.ConeGeometry(0.8, 2.4, 6);
+  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: '#443a2c', roughness: 1 }), placements.length);
+  const crowns = new THREE.InstancedMesh(crownGeo, material, placements.length);
+  const dummy = new THREE.Object3D();
+
+  placements.forEach((p, i) => {
+    dummy.position.set(p.x, p.y + p.s * 0.8, p.z);
+    dummy.scale.set(p.s * 0.15, p.s * 1.6, p.s * 0.15);
+    dummy.rotation.set(0, i * 2.399, 0);
+    dummy.updateMatrix();
+    trunks.setMatrixAt(i, dummy.matrix);
+
+    dummy.position.set(p.x, p.y + p.s * 2.1, p.z);
+    dummy.scale.set(p.s * 0.46, p.s * 1.45, p.s * 0.46);
+    dummy.updateMatrix();
+    crowns.setMatrixAt(i, dummy.matrix);
+  });
+
+  trunks.castShadow = crowns.castShadow = true;
+  group.add(trunks, crowns);
 }
 
 function buildCircuitGroup(path: ShowcaseTrackPath): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'muse-showcase-circuit-v2';
+  group.name = 'racerrhi-apex-cote-d-azur';
 
-  const lighting = createShowcaseLightingRig(isMobileGpu(), TRACK_CENTER_X);
-  group.add(lighting.hemi, lighting.sun);
+  const terrainMat = new THREE.MeshStandardMaterial({ color: '#6c7950', roughness: 1 });
+  const rockMat = new THREE.MeshStandardMaterial({ color: '#9b927a', roughness: 0.95 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#243331', roughness: 0.72 });
+  const concrete = new THREE.MeshStandardMaterial({ color: '#b9b5a1', roughness: 0.9 });
+  const metal = new THREE.MeshStandardMaterial({ color: '#aeb6ad', roughness: 0.4, metalness: 0.7 });
+  const white = new THREE.MeshStandardMaterial({ color: '#e7e1c8', roughness: 0.86 });
+  const red = new THREE.MeshStandardMaterial({ color: '#b84029', roughness: 0.8 });
 
-  const surfaceMats = createShowcaseSurfaceMaterials();
-  group.userData.showcaseSurfaceMaterials = surfaceMats;
-  const terrainMaterial = new THREE.MeshStandardMaterial({ color: 0x526044, roughness: 1 });
-  const runoffMaterial = surfaceMats.runoffSpeckle;
-  const asphaltMaterial = surfaceMats.asphalt;
-  const concreteMaterial = surfaceMats.barrierConcrete;
-  const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x29333d, metalness: 0.67, roughness: 0.42 });
-  const cyanMaterial = new THREE.MeshStandardMaterial({
-    color: 0x22d3ee,
-    emissive: 0x075985,
-    emissiveIntensity: 0.8,
-    roughness: 0.35,
+  const roadTexture = buildNoiseTexture('road');
+  const gravelTexture = buildNoiseTexture('gravel');
+  const roadMat = new THREE.MeshStandardMaterial({ color: '#a2a7a4', roughness: 0.9, map: roadTexture });
+  const gravelMat = new THREE.MeshStandardMaterial({ color: '#b6a68a', roughness: 1, map: gravelTexture });
+
+  // Warm coastal sky copied from racerrhi's visual direction.
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    vertexShader: 'varying vec3 w; void main(){w=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(w,1.);}',
+    fragmentShader: `varying vec3 w; void main(){float h=normalize(w).y; vec3 horizon=vec3(.72,.70,.60); vec3 zenith=vec3(.20,.36,.43); vec3 c=mix(horizon,zenith,smoothstep(-.05,.75,h)); gl_FragColor=vec4(c,1.);}`,
   });
+  group.add(new THREE.Mesh(new THREE.SphereGeometry(4000, 28, 14), skyMat));
 
-  const worldFloor = new THREE.Mesh(new THREE.PlaneGeometry(1300, 1200), terrainMaterial);
-  worldFloor.rotation.x = -Math.PI / 2;
-  worldFloor.position.set(TRACK_CENTER_X, -0.12, 0);
-  worldFloor.receiveShadow = true;
-  group.add(worldFloor);
+  const hemi = new THREE.HemisphereLight('#dceeff', '#59684a', 0.8);
+  const sun = new THREE.DirectionalLight('#ffdda1', 3);
+  sun.position.set(-120, 180, -90);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -55;
+  sun.shadow.camera.right = 55;
+  sun.shadow.camera.top = 55;
+  sun.shadow.camera.bottom = -55;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 300;
+  sun.shadow.bias = -0.00015;
+  group.add(hemi, sun);
 
-  const terrainBerm = new THREE.Mesh(buildTerrainBerm(path), terrainMaterial);
-  terrainBerm.receiveShadow = true;
-  group.add(terrainBerm);
+  group.add(buildRibbon(path, 0, 33, gravelMat, -0.09));
+  group.add(buildRibbon(path, 0, 15, roadMat, 0.02));
+  group.add(buildRibbon(path, -7.7, 0.9, white, 0.045, true));
+  group.add(buildRibbon(path, 7.7, 0.9, white, 0.045, true));
+  group.add(buildRibbon(path, -7.19, 0.13, white, 0.06));
+  group.add(buildRibbon(path, 7.19, 0.13, white, 0.06));
 
-  const road = new THREE.Mesh(buildRibbon(path, TRACK_WIDTH_M, 0.024), asphaltMaterial);
-  road.receiveShadow = true;
-  group.add(road);
+  const rubber = new THREE.MeshStandardMaterial({ color: '#171c1a', transparent: true, opacity: 0.18, depthWrite: false, roughness: 1 });
+  group.add(buildRibbon(path, -1.05, 0.6, rubber, 0.035));
+  group.add(buildRibbon(path, 1.05, 0.6, rubber, 0.035));
 
-  const edgePresentation = buildTrackEdgePresentation(path, {
-    trackHalfWidthM: TRACK_HALF_WIDTH_M,
-    curbWidthM: CURB_WIDTH_M,
-    outerRunoffM: OUTER_RUNOFF_M,
-    runoffMaterial,
+  // Racerrhi's continuous double guardrail.
+  for (const side of [-1, 1]) {
+    group.add(buildContinuousRail(path, side * BARRIER_OFFSET_M, 0.65, metal));
+    group.add(buildContinuousRail(path, side * BARRIER_OFFSET_M, 1.08, metal));
+
+    const count = Math.floor(path.lengthM / 5);
+    const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.15, 1.3, 0.15), metal, count);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < count; i++) {
+      const a = path.sampleAt(i / count);
+      dummy.position.copy(a.center).addScaledVector(a.lateral, side * BARRIER_OFFSET_M);
+      dummy.position.y += 0.6;
+      dummy.rotation.y = Math.atan2(a.tangent.x, a.tangent.z);
+      dummy.updateMatrix();
+      posts.setMatrixAt(i, dummy.matrix);
+    }
+    posts.castShadow = true;
+    group.add(posts);
+  }
+
+  group.add(buildCoastalTerrain(path, terrainMat));
+
+  const waterMat = new THREE.ShaderMaterial({
+    transparent: false,
+    vertexShader: 'varying vec3 w; void main(){w=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(w,1.);}',
+    fragmentShader: `varying vec3 w; void main(){float a=sin(w.x*.35)+sin(w.z*.29)+sin((w.x+w.z)*.7); vec3 c=vec3(.045,.24,.27)+a*.006; gl_FragColor=vec4(c,1.);}`,
   });
-  group.add(edgePresentation.group);
+  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(7000, 7000), waterMat);
+  ocean.rotation.x = -Math.PI / 2;
+  ocean.position.set(-1300, -2, 0);
+  group.add(ocean);
 
-  // Start/finish checkerboard aligned to the actual banked road basis.
-  const start = path.sampleAt(SHOWCASE_SPAWN_U);
-  const checkerCanvas = document.createElement('canvas');
-  checkerCanvas.width = 160;
-  checkerCanvas.height = 32;
-  const checkerContext = checkerCanvas.getContext('2d')!;
-  for (let x = 0; x < 20; x++) {
-    for (let y = 0; y < 4; y++) {
-      checkerContext.fillStyle = (x + y) % 2 ? '#111827' : '#f8fafc';
-      checkerContext.fillRect(x * 8, y * 8, 8, 8);
+  // Tall inland ridgelines from racerrhi.
+  for (let j = 0; j < 8; j++) {
+    const geometry = new THREE.PlaneGeometry(650, 600, 32, 32);
+    geometry.rotateX(-Math.PI / 2);
+    const attr = geometry.attributes.position;
+    for (let i = 0; i < attr.count; i++) {
+      const x = attr.getX(i);
+      const z = attr.getZ(i);
+      attr.setY(i, Math.max(0, 1 - Math.hypot(x / 340, z / 330)) * 230 + Math.sin(x * 0.032) * Math.cos(z * 0.037) * 13);
+    }
+    geometry.computeVertexNormals();
+    const ridge = new THREE.Mesh(geometry, rockMat);
+    ridge.position.set(650 + (j % 2) * 360, 0, -1200 + j * 350);
+    ridge.receiveShadow = true;
+    group.add(ridge);
+  }
+
+  buildForest(group, path, new THREE.MeshStandardMaterial({ color: '#314b35', roughness: 1 }));
+
+  // Start gantry and grid.
+  const start = path.sampleAt(0);
+  for (const side of [-1, 1]) {
+    trackObject(group, path, 0, side * 10, new THREE.Mesh(new THREE.BoxGeometry(0.5, 7, 0.5), dark), 3.5);
+  }
+  trackObject(group, path, 0, 0, new THREE.Mesh(new THREE.BoxGeometry(21, 2, 0.55), dark), 6.5);
+  trackObject(group, path, 0.0004, 0, makeSign('APEX  /  CÔTE D’AZUR', 19, 1.4), 6.5);
+
+  const yaw = Math.atan2(start.tangent.x, start.tangent.z);
+  for (let a = 0; a < 16; a++) {
+    for (let b = 0; b < 2; b++) {
+      const material = a % 2 === b ? white : dark;
+      const tile = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), material);
+      const p = start.center.clone().addScaledVector(start.lateral, -7.2 + a * 0.9).addScaledVector(start.tangent, b * 0.9);
+      tile.position.copy(p);
+      tile.position.y += 0.06;
+      tile.rotation.set(-Math.PI / 2, 0, -yaw);
+      group.add(tile);
     }
   }
-  const checkerTexture = new THREE.CanvasTexture(checkerCanvas);
-  const checkerMaterial = new THREE.MeshBasicMaterial({ map: checkerTexture, side: THREE.DoubleSide });
-  const startLine = new THREE.Mesh(new THREE.PlaneGeometry(TRACK_WIDTH_M, 3.0), checkerMaterial);
-  startLine.geometry.rotateX(-Math.PI / 2);
-  startLine.position.copy(start.center).addScaledVector(start.normal, 0.055);
-  startLine.quaternion.copy(trackQuaternion(start));
-  group.add(startLine);
 
-  // Barriers remain route-following. Kerbs are now smooth corner-only ribbons
-  // built by realisticCurbs.ts instead of repeated 5 m cuboids around the lap.
-  const stationCount = 220;
-  const barrierGeometry = new THREE.BoxGeometry(0.52, 1.05, 6.5);
-  const barriers = new THREE.InstancedMesh(barrierGeometry, concreteMaterial, stationCount * 2);
-  const matrix = new THREE.Matrix4();
-  const scale = new THREE.Vector3(1, 1, 1);
-  let barrierIndex = 0;
+  // Pit buildings.
+  for (let i = 0; i < 9; i++) {
+    const u = 0.014 + i * 0.005;
+    const a = path.sampleAt(u);
+    const p = a.center.clone().addScaledVector(a.lateral, 28);
+    const angle = Math.atan2(a.tangent.x, a.tangent.z);
+    addBox(group, 15, 5.5, 9, concrete, p.x, p.y + 2.65, p.z, angle);
+    addBox(group, 15.5, 0.25, 9.4, white, p.x, p.y + 5.6, p.z, angle);
+    const glass = new THREE.MeshStandardMaterial({ color: '#254342', roughness: 0.15, metalness: 0.6 });
+    addBox(group, 0.2, 1.5, 7, glass, p.x - 7.6 * a.lateral.x, p.y + 4.2, p.z - 7.6 * a.lateral.z, angle);
+  }
 
-  for (let i = 0; i < stationCount; i++) {
-    const s = path.sampleAt(i / stationCount);
-    const quaternion = trackQuaternion(s);
-    for (const side of [-1, 1]) {
-      const barrierPosition = s.center
-        .clone()
-        .addScaledVector(s.bankedLateral, side * BARRIER_OFFSET_M)
-        .addScaledVector(s.normal, 0.53);
-      matrix.compose(barrierPosition, quaternion, scale);
-      barriers.setMatrixAt(barrierIndex++, matrix);
+  // Braking boards and coast banners.
+  for (const baseU of [0.145, 0.30, 0.445, 0.61, 0.735, 0.845]) {
+    for (let i = 0; i < 3; i++) {
+      trackObject(group, path, baseU + i * 0.016, -11, makeSign(String(150 - i * 50), 1.3, 1.7, '#f0e9d4', '#152a27'), 1.3);
+    }
+    trackObject(group, path, baseU + 0.026, 16.2, makeSign('APEX  /  DRIVE THE COAST', 12, 1.1), 1.8);
+  }
+
+  // Compact grandstand.
+  for (let i = 0; i < 10; i++) {
+    const u = 0.09 + i * 0.006;
+    const a = path.sampleAt(u);
+    const p = a.center.clone().addScaledVector(a.lateral, 28);
+    for (let j = 0; j < 5; j++) {
+      addBox(
+        group,
+        2,
+        0.7,
+        9,
+        j % 2 ? new THREE.MeshStandardMaterial({ color: '#b8bdae', roughness: 0.9 }) : dark,
+        p.x + j * 1.25 * a.lateral.x,
+        p.y + 0.8 + j * 0.75,
+        p.z + j * 1.25 * a.lateral.z,
+        Math.atan2(a.tangent.x, a.tangent.z),
+      );
     }
   }
-  barriers.count = barrierIndex;
-  barriers.instanceMatrix.needsUpdate = true;
-  barriers.castShadow = true;
-  group.add(barriers);
-  finalizeInstancedMesh(barriers);
 
-  addGantry(group, start, metalMaterial, cyanMaterial, 22);
-  addGantry(group, path.sampleAt(0.36), metalMaterial, cyanMaterial, 16);
-
-  // Start-straight pit/paddock and grandstand are anchored to the local basis.
-  const pitSample = path.sampleAt(0.025);
-  const pitLaneGeometry = new THREE.BoxGeometry(8.0, 0.10, 175);
-  const pitWallGeometry = new THREE.BoxGeometry(0.55, 1.1, 180);
-  const pitLaneOffset = -(OUTER_RUNOFF_M + 7.0);
-  addTrackAlignedBox(group, pitSample, pitLaneGeometry, asphaltMaterial, pitLaneOffset, 0.02);
-  addTrackAlignedBox(group, pitSample, pitWallGeometry, concreteMaterial, -(OUTER_RUNOFF_M + 2.0), 0.55);
-
-  // Real CC0 venue assets replace the old primitive paddock block and concrete stand rows.
-  // Keep the physical-looking pit lane and pit wall as immediate procedural fallback structure.
-  const tracksideContext = { path, barrierOffsetM: BARRIER_OFFSET_M };
-  buildBrakingBoardFamily(group, tracksideContext, { approachU: 0.81, side: -1 });
-  buildTimingSectorObjects(group, tracksideContext, { u: 0.43, sectorName: 'SUMMIT' });
-  buildMarshalPost(group, tracksideContext, { u: 0.655, side: -1, lightColor: 0xfacc15 });
-  buildFictionalBanner(group, tracksideContext, { u: 0.205, brandId: 'nordlys', side: 1 });
-
-  // Summit landmark: spectacle remains, but its supports stay outside recovery space.
-  const summit = path.sampleAt(0.43);
-  const towerGeometry = new THREE.CylinderGeometry(3.0, 5.0, 44, 14);
-  const tower = new THREE.Mesh(towerGeometry, metalMaterial);
-  tower.position
-    .copy(summit.center)
-    .addScaledVector(summit.lateral, BARRIER_OFFSET_M + 20);
-  tower.position.y += 22;
-  tower.castShadow = true;
-  group.add(tower);
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(10, 0.9, 12, 48), cyanMaterial);
-  halo.position.copy(tower.position);
-  halo.position.y += 10;
-  halo.rotation.x = Math.PI / 2.5;
-  group.add(halo);
-
-  // Layered alpine depth replaces the old uniform rock/tree/mountain bands.
-  group.add(buildTerrainComposition(path, {
-    barrierOffsetM: BARRIER_OFFSET_M,
-    bermHalfWidthM: TERRAIN_BERM_HALF_WIDTH_M,
-    trackCenterX: TRACK_CENTER_X,
-  }));
-
-  // Visual-only road micro-detail. Physics SurfaceProvider remains untouched.
-  group.add(buildShowcaseRoadDetails(path, {
-    gridBox: surfaceMats.gridBox,
-    paintArrow: surfaceMats.paintArrow,
-    seamPatch: surfaceMats.seamPatch,
-    edgeWear: surfaceMats.edgeWear,
-    drainageGrate: surfaceMats.drainageGrate,
-    pitConcrete: surfaceMats.pitConcrete,
-  }, {
-    barrierOffsetM: BARRIER_OFFSET_M,
-    outerRunoffM: OUTER_RUNOFF_M,
-    seed: 1234,
-    yLiftM: 0.04,
-    maxArrows: 8,
-    maxGrates: 14,
-  }));
-
-  // Two compact race-day crowd clusters: four instanced draws total.
-  const crowdRoot = new THREE.Group();
-  crowdRoot.name = 'showcase-race-day-crowd';
-  const crowdRng = makeSeededRandom(0xc20d);
-  for (const [u, side] of [[0.035, 1], [0.365, 1]] as const) {
-    const s = path.sampleAt(u);
-    const placements = makeSeatedGrid(3, 10, 0.62, 0.46, 0.72, 0.48, crowdRng);
-    const cluster = buildCrowdCluster(placements, crowdRng);
-    cluster.position.copy(s.center)
-      .addScaledVector(s.bankedLateral, side * (BARRIER_OFFSET_M + 11))
-      .addScaledVector(s.normal, 1.1);
-    cluster.quaternion.copy(trackQuaternion(s));
-    crowdRoot.add(cluster);
+  // Tire wall from racerrhi's Riviera sector.
+  const tireMaterial = new THREE.MeshStandardMaterial({ color: '#181b1e', roughness: 0.94 });
+  const tireCount = 240;
+  const tires = new THREE.InstancedMesh(new THREE.TorusGeometry(0.38, 0.17, 8, 16), tireMaterial, tireCount);
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < tireCount; i++) {
+    const a = path.sampleAt(0.27 + Math.floor(i / 3) * 0.00082);
+    dummy.position.copy(a.center).addScaledVector(a.lateral, -14.5);
+    dummy.position.y += 0.22 + (i % 3) * 0.3;
+    dummy.rotation.set(Math.PI / 2, 0, 0);
+    dummy.updateMatrix();
+    tires.setMatrixAt(i, dummy.matrix);
   }
-  group.add(crowdRoot);
+  tires.castShadow = true;
+  group.add(tires);
 
   return group;
 }
 
 function disposeGroup(group: THREE.Group): void {
-  const stagedSurfaceMaterials = group.userData.showcaseSurfaceMaterials as { dispose?: () => void } | undefined;
-  disposeShowcaseGroup(group);
-  stagedSurfaceMaterials?.dispose?.();
+  const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.geometry) mesh.geometry.dispose();
+    const objectMaterials = mesh.material
+      ? (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+      : [];
+    for (const material of objectMaterials) {
+      materials.add(material);
+      const candidate = material as THREE.Material & Record<string, unknown>;
+      for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'emissiveMap']) {
+        const value = candidate[key];
+        if (value instanceof THREE.Texture) textures.add(value);
+      }
+    }
+  });
+  textures.forEach((texture) => texture.dispose());
+  materials.forEach((material) => material.dispose());
 }
 
 export function createShowcaseCircuit(scene: THREE.Scene): ShowcaseCircuitRuntime {
@@ -690,29 +702,11 @@ export function createShowcaseCircuit(scene: THREE.Scene): ShowcaseCircuitRuntim
   surfaceProvider.resetHint(spawn.elevation);
   scene.add(group);
 
-  // Scene atmosphere is visual-only and keeps one sky draw + one distant haze draw.
-  group.add(createShowcaseAtmosphere(scene, TRACK_CENTER_X));
-
-  let disposed = false;
-  void tryComposeKenneyVenueGroup({
-    path: SHOWCASE_PATH,
-    barrierOffsetM: BARRIER_OFFSET_M,
-    outerRunoffM: OUTER_RUNOFF_M,
-    include: [...SHOWCASE_KENNEY_ASSET_IDS],
-  }).then((venueGroup) => {
-    if (disposed) {
-      disposeShowcaseGroup(venueGroup);
-      return;
-    }
-    if (venueGroup.children.length > 0) group.add(venueGroup);
-  });
-
   return {
     group,
     surfaceProvider,
     spawn,
     dispose: () => {
-      disposed = true;
       scene.remove(group);
       disposeGroup(group);
     },
