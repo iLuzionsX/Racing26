@@ -20,9 +20,10 @@ export interface ISurfaceProvider {
 /**
  * Completely flat proving-ground surface.
  *
- * Elevation, pitch and roll are always zero. This keeps suspension and tire
- * validation isolated from hidden hills, crests, dips, banking and bumps while
- * retaining the existing material/friction zones for grip testing.
+ * Elevation, pitch and roll are always zero. The rendered proving ground is one
+ * continuous asphalt plane except for the visibly distinct wet skidpad and the
+ * marked dry/racing-line areas, so physics must not introduce invisible gravel,
+ * marbles, or kerb bands simply because a crash pushes the car sideways.
  */
 export class ProvingGroundSurfaceProvider implements ISurfaceProvider {
   public sampleSurface(x: number, z: number): SurfaceSample {
@@ -49,31 +50,14 @@ export class ProvingGroundSurfaceProvider implements ISurfaceProvider {
         type = 'racing_line';
         friction = 1.14;
         rollingResistance = 0.018;
-      } else if (Math.abs(z) <= 510) {
-        // Main runway: grip zones only. Every zone remains at exactly Y = 0.
-        const absX = Math.abs(x);
-        if (absX <= 6.5) {
-          type = 'racing_line';
-          friction = 1.10;
-          rollingResistance = 0.016;
-        } else if (absX <= 17.5) {
-          type = 'asphalt';
-          friction = 1.0;
-          rollingResistance = 0.015;
-        } else if (absX <= 20.0) {
-          // Keep the lower-grip kerb material band, but remove its former 45 mm rise.
-          type = 'kerb';
-          friction = 0.88;
-          rollingResistance = 0.024;
-        } else if (absX <= 24.5) {
-          type = 'marbles';
-          friction = 0.72;
-          rollingResistance = 0.035;
-        } else {
-          type = 'gravel';
-          friction = 0.55;
-          rollingResistance = 0.075;
-        }
+      } else if (Math.abs(z) <= 510 && Math.abs(x) <= 6.5) {
+        // The marked center runway is the only longitudinal high-grip strip.
+        // Everything outside it remains ordinary asphalt because that is what the
+        // player actually sees on the flat proving-ground mesh. Low-grip runoff and
+        // gravel still exist on the Showcase Circuit, where they are visibly drawn.
+        type = 'racing_line';
+        friction = 1.10;
+        rollingResistance = 0.016;
       }
     }
 

@@ -53,9 +53,154 @@ function usefulSteerInput(speedMs: number): number {
   return PhysicsMath.clamp(centerAngle / config.maxSteerAngle, 0.008, 0.12);
 }
 
+type ContactKinematicProbe = {
+  maxProductionErrorMs: number;
+  maxRoadHeightShortcutErrorMs: number;
+  maxSupportPositionErrorM: number;
+  maxTopMountAnchorOffsetM: number;
+  samples: number;
+};
+
+/**
+ * Intercept the planar velocity Vehicle actually passes into each wheel and verify
+ * the authoritative suspension contact X/Z at the same instant.
+ *
+ * The reduced unsprung model is world-vertical in Y. Its X/Z support is a
+ * body-fixed line through the static roll center derived from the same virtual
+ * wishbone geometry that controls camber and bump steer. Anchoring the slider at
+ * the suspension top mount makes chassis roll sweep the wheels laterally relative
+ * to the wheel arches and gives tire slip the wrong roll/pitch-rate lever arm.
+ */
+function installContactKinematicProbe(sim: Simulation): ContactKinematicProbe {
+  const probe: ContactKinematicProbe = {
+    maxProductionErrorMs: 0,
+    maxRoadHeightShortcutErrorMs: 0,
+    maxSupportPositionErrorM: 0,
+    maxTopMountAnchorOffsetM: 0,
+    samples: 0,
+  };
+  const hardpoints = sim.vehicle.getHardpointsBody();
+  const supportHeightsAboveRoad = sim.vehicle.planarSupportBodyYByCorner.map(
+    (bodyY) => bodyY + config.centerOfGravityHeight
+  );
+  for (const height of supportHeightsAboveRoad) {
+    assert(
+      height > 0 && height < 0.20,
+      `derived suspension roll center is implausible: ${height.toFixed(4)} m above road`
+    );
+  }
+
+  sim.vehicle.wheels.forEach((wheel, index) => {
+    const downstreamUpdate = wheel.update.bind(wheel);
+    wheel.update = ((
+      longitudinalVelocity: number,
+      lateralVelocity: number,
+      verticalLoad: number,
+      camberDeg: number,
+      driveTorque: number,
+      hydraulicBrakeTorque: number,
+      handbrakeTorque: number,
+      surfaceFriction: number,
+      rollingResistance: number,
+      dt: number,
+      reflectedDrivelineInertia: number = 0
+    ) => {
+      const rigid = sim.vehicle.rigidBody;
+      const hp = hardpoints[index];
+      const supportBody = PhysicsMath.vec3(
+        hp.x,
+        sim.vehicle.planarSupportBodyYByCorner[index],
+        hp.z
+      );
+
+      // Exact velocity of the body-fixed X/Z support used by SuspensionSystem.
+      const supportVelocityBody = rigid.getPointVelocityBody(supportBody);
+      const steer = wheel.steerAngle;
+      const sinS = Math.sin(steer);
+      const cosS = Math.cos(steer);
+      const expectedLongitudinal =
+        supportVelocityBody.x * sinS + supportVelocityBody.z * cosS;
+      const expectedLateral =
+        supportVelocityBody.x * cosS - supportVelocityBody.z * sinS;
+
+      probe.maxProductionErrorMs = Math.max(
+        probe.maxProductionErrorMs,
+        Math.hypot(
+          longitudinalVelocity - expectedLongitudinal,
+          lateralVelocity - expectedLateral
+        )
+      );
+
+      const supportWorld = PhysicsMath.vec3Add(
+        rigid.position,
+        PhysicsMath.quatRotateVec3(rigid.orientation, supportBody)
+      );
+      const topMountWorld = PhysicsMath.vec3Add(
+        rigid.position,
+        PhysicsMath.quatRotateVec3(rigid.orientation, hp)
+      );
+      const contactWorld = sim.vehicle.suspension.states[index].contactPointWorld;
+
+      probe.maxSupportPositionErrorM = Math.max(
+        probe.maxSupportPositionErrorM,
+        Math.hypot(
+          contactWorld.x - supportWorld.x,
+          contactWorld.z - supportWorld.z
+        )
+      );
+      probe.maxTopMountAnchorOffsetM = Math.max(
+        probe.maxTopMountAnchorOffsetM,
+        Math.hypot(
+          topMountWorld.x - supportWorld.x,
+          topMountWorld.z - supportWorld.z
+        )
+      );
+
+      // Reconstruct the rejected road-height rigid-point assumption. Y is
+      // road-constrained, so this point is not material to the chassis and its
+      // inferred planar velocity diverges during roll/pitch transients.
+      const contactArmWorld = PhysicsMath.vec3Sub(contactWorld, rigid.position);
+      const contactPointBody = PhysicsMath.quatInverseRotateVec3(
+        rigid.orientation,
+        contactArmWorld
+      );
+      const roadHeightVelocityBody = rigid.getPointVelocityBody(contactPointBody);
+      const roadLongitudinal =
+        roadHeightVelocityBody.x * sinS + roadHeightVelocityBody.z * cosS;
+      const roadLateral =
+        roadHeightVelocityBody.x * cosS - roadHeightVelocityBody.z * sinS;
+      probe.maxRoadHeightShortcutErrorMs = Math.max(
+        probe.maxRoadHeightShortcutErrorMs,
+        Math.hypot(
+          roadLongitudinal - expectedLongitudinal,
+          roadLateral - expectedLateral
+        )
+      );
+      probe.samples++;
+
+      return downstreamUpdate(
+        longitudinalVelocity,
+        lateralVelocity,
+        verticalLoad,
+        camberDeg,
+        driveTorque,
+        hydraulicBrakeTorque,
+        handbrakeTorque,
+        surfaceFriction,
+        rollingResistance,
+        dt,
+        reflectedDrivelineInertia
+      );
+    }) as typeof wheel.update;
+  });
+
+  return probe;
+}
+
 function run(speedKmh: number, direction: 1 | -1) {
   const initialSpeedMs = speedKmh / 3.6;
   const sim = makeRollingM5(initialSpeedMs);
+  const contactProbe = installContactKinematicProbe(sim);
   const targetSteer = usefulSteerInput(initialSpeedMs) * direction;
   const rampSteps = Math.round(0.35 / DT);
   const holdSteps = Math.round(1.50 / DT);
@@ -117,6 +262,11 @@ function run(speedKmh: number, direction: 1 | -1) {
     peakRearSlipDeg,
     minWheelLoadN,
     releasePeakYawDegS,
+    maxContactKinematicErrorMs: contactProbe.maxProductionErrorMs,
+    maxRoadHeightShortcutErrorMs: contactProbe.maxRoadHeightShortcutErrorMs,
+    maxSupportPositionErrorM: contactProbe.maxSupportPositionErrorM,
+    maxTopMountAnchorOffsetM: contactProbe.maxTopMountAnchorOffsetM,
+    contactKinematicSamples: contactProbe.samples,
   };
 }
 
@@ -144,6 +294,16 @@ for (const speedKmh of SPEEDS_KMH) {
       `${speedKmh} km/h turn implausibly unloaded a wheel: ${row.minWheelLoadN.toFixed(0)} N`);
     assert(row.releasePeakYawDegS < 6,
       `${speedKmh} km/h yaw failed to settle after steering release: ${row.releasePeakYawDegS.toFixed(1)} deg/s`);
+    assert(row.contactKinematicSamples > 100,
+      `${speedKmh} km/h contact kinematic probe did not collect enough samples`);
+    assert(row.maxRoadHeightShortcutErrorMs > 0.001,
+      `${speedKmh} km/h maneuver did not exercise the road-height/support velocity distinction`);
+    assert(row.maxTopMountAnchorOffsetM > 0.001,
+      `${speedKmh} km/h maneuver did not exercise top-mount vs wheel-center roll geometry`);
+    assert(row.maxSupportPositionErrorM < 1e-9,
+      `${speedKmh} km/h suspension contact X/Z left the roll-center support plane: ${row.maxSupportPositionErrorM.toFixed(9)} m`);
+    assert(row.maxContactKinematicErrorMs < 1e-6,
+      `${speedKmh} km/h tire planar velocity did not follow the suspension X/Z support: ${row.maxContactKinematicErrorMs.toFixed(6)} m/s`);
   }
 
   assert(mirrorError(left.peakYawDegS, right.peakYawDegS, 2) < 0.15,
