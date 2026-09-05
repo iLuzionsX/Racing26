@@ -28,6 +28,45 @@ jobs:
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
         run: node scripts/muse-agent/run.mjs --task "CONFIGURATION PROBE ONLY. Return JSON with summary config-probe, patch null, no proposed files, no tests, and no recommendations."
+      - name: Post configuration probe to PR 127
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const files = fs.existsSync('.muse/artifacts')
+            ? fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort()
+            : [];
+          let payload = { status: 'no-artifact' };
+          if (files.length) {
+            const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
+            payload = {
+              status: a.status,
+              model: a.model,
+              requested_reasoning_effort: a.requested_reasoning_effort,
+              response_reasoning_effort: a.response_reasoning_effort,
+              summary: a.result?.summary ?? ''
+            };
+          }
+          const body = `<!-- muse-chassis-probe:${process.env.RUN_ID} -->
+### Muse configuration probe
+\`\`\`json
+${JSON.stringify(payload, null, 2)}
+\`\`\``;
+          const res = await fetch('https://api.github.com/repos/iLuzionsX/Racing26/issues/127/comments', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({body})
+          });
+          if (!res.ok) throw new Error(`Failed to post probe: ${res.status} ${(await res.text()).slice(0,500)}`);
+          NODE
       - name: Verify actual provider configuration
         run: |
           node <<'NODE'
