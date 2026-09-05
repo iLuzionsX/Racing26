@@ -62,7 +62,7 @@ export const StartMenu: React.FC<StartMenuProps> = ({
           <div className="text-[9px] font-black uppercase tracking-[0.28em] text-cyan-300">BMW M5 G90 · Driving Lab</div>
           <div className="mt-1 text-2xl font-black tracking-[-0.04em] text-white sm:text-3xl">Choose your proving ground.</div>
           <p className="mt-2 max-w-xl text-[11px] leading-relaxed text-slate-400">
-            The original plane stays the default. The Showcase Circuit is loaded only when you choose it.
+            The original plane stays available. The Racerrhi coastal circuit is loaded only when you choose it.
           </p>
         </div>
 
@@ -76,10 +76,10 @@ export const StartMenu: React.FC<StartMenuProps> = ({
           )}
           {option(
             'showcase',
-            'Muse Circuit 01',
-            'Showcase Circuit',
-            'A high-speed mountain GP loop with banked bowl, bridge crossover, canyon tunnel, corkscrew-style elevation and a landmark hairpin.',
-            'Elevation · bridge · tunnel · grandstands · 3 sectors',
+            'Racerrhi Original',
+            'APEX · Côte d’Azur',
+            'The original Racerrhi coastal circuit: fast elevation changes, ocean-side sweepers, Riviera hairpins, gravel shoulders and continuous guardrails.',
+            'Coastal loop · pit lane · ocean · mountains · original layout',
           )}
         </div>
 
@@ -93,7 +93,7 @@ export const StartMenu: React.FC<StartMenuProps> = ({
             disabled={isLoadingTrack}
             className="ml-auto min-w-[158px] rounded-xl bg-cyan-300 px-5 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-65"
           >
-            {isLoadingTrack ? 'Building circuit…' : selected === 'showcase' ? 'Load circuit' : 'Start on plane'}
+            {isLoadingTrack ? 'Building Côte d’Azur…' : selected === 'showcase' ? 'Load Côte d’Azur' : 'Start on plane'}
           </button>
         </div>
       </div>
