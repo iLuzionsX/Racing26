@@ -1,14 +1,9 @@
-name: Muse Spark 1.3 xhigh tyre pass
+name: Muse Spark xhigh tyre pass
 
 on:
   push:
     branches:
       - physics/tyre-response-corner-balance
-    paths:
-      - .github/muse-task.txt
-      - .github/workflows/muse-agent.yml
-      - scripts/muse-agent/zen.mjs
-      - scripts/muse-agent/run.mjs
 
 permissions:
   contents: read
@@ -19,7 +14,15 @@ jobs:
       fail-fast: false
       max-parallel: 8
       matrix:
-        agent: [1, 2, 3, 4, 5, 6, 7, 8]
+        agent:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -27,26 +30,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Guardrails
-        run: node scripts/muse-agent/test.mjs
-      - name: Run focused xhigh investigation
+      - run: node scripts/muse-agent/test.mjs
+      - name: Run Muse investigation
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
+          AGENT_ID: ${{ matrix.agent }}
         run: |
-          BASE_TASK="$(cat .github/muse-task.txt)"
-          case "${{ matrix.agent }}" in
-            1) FOCUS="INDEPENDENT DIAGNOSIS A. Trace a reproducible abrupt-grip/spinout scenario from slip kinematics through tire forces and chassis response. Do not assume other agents' conclusions." ;;
-            2) FOCUS="INDEPENDENT DIAGNOSIS B. Investigate pure/combined-slip force curves, peak/post-peak recovery, relaxation and low-speed numerical transitions independently." ;;
-            3) FOCUS="INDEPENDENT DIAGNOSIS C. Investigate front/rear balance, transient yaw/sideslip, load transfer, throttle/lift/brake interactions and timestep dependence independently." ;;
-            4) FOCUS="CONFIGURATION AND INITIALIZATION. Audit tire parameters, units, defaults, front/rear assignments, reference loads and startup determinism. Explicitly test the reported rear-reference-load and startup-sampling hypotheses." ;;
-            5) FOCUS="STEERING AND ASSISTS. Audit keyboard and on-screen wheel input, ratio, speed sensitivity, filtering, countersteer, stability assists, ABS/TCS interactions, and whether controls create or mask abrupt handling." ;;
-            6) FOCUS="LOADS AND DRIVETRAIN. Audit per-wheel normal load, load sensitivity, suspension transfer, differential behavior and torque distribution for discontinuities, double-counting, signs or rear unloading." ;;
-            7) FOCUS="BASELINE AND AUTOMATED VALIDATION. Map existing telemetry/tests to the requested ten maneuvers, define repeatable before/after measurements and evidence-derived acceptance criteria, and identify exact harness ownership files. Read-only." ;;
-            8) FOCUS="DRIVING ASSESSMENT. Determine available direct browser-driving capability; distinguish observation from inference. If unavailable, provide the exact repeatable keyboard/on-screen-wheel manual route and telemetry signatures." ;;
-          esac
-          node scripts/muse-agent/run.mjs --task "Agent ${{ matrix.agent }} of 8. $FOCUS
-
-$BASE_TASK"
+          node scripts/muse-agent/run.mjs --task "Agent $AGENT_ID of 8. Read .github/muse-task.txt first. This is a read-only investigation: patch must be null. Agent 1: independent abrupt-grip diagnosis. Agent 2: independent tire force-curve and combined-slip diagnosis. Agent 3: independent balance, transient and timestep diagnosis. Agent 4: configuration, reference-load and startup-determinism audit. Agent 5: steering, keyboard, on-screen wheel and assists audit. Agent 6: wheel loads, suspension, differential and drivetrain audit. Agent 7: baseline telemetry and automated-validation plan. Agent 8: direct-driving capability assessment and repeatable manual driving protocol. Only perform the assignment matching your agent number. Return reproduction, code paths, causal explanation, measurements or precise measurement plan, falsifier, smallest correction, and remaining uncertainty."
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
