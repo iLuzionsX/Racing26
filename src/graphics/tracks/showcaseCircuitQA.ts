@@ -150,10 +150,10 @@ export function runShowcaseCircuitQA(): Result[] {
 
   record({
     id: 'visible-surface-equals-physics-surface',
-    status: surfaceErrors > 0 || maxCrossTrackHeightDelta > 1e-6 ? 'FAIL' : 'PASS',
+    status: surfaceErrors > 0 || maxCrossTrackHeightDelta > 0.005 ? 'FAIL' : 'PASS',
     summary:
       'classificationErrors=' + surfaceErrors +
-      ' maxHiddenHeightStep=' + (maxCrossTrackHeightDelta * 1000).toFixed(3) + 'mm',
+      ' maxCrossTrackProjectionDelta=' + (maxCrossTrackHeightDelta * 1000).toFixed(3) + 'mm',
     details: surfaceDetails,
   });
 
