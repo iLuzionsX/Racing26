@@ -42,6 +42,7 @@ export class Vehicle {
   public aero: AerodynamicsSystem;
   public telemetry: TelemetrySystem;
   public surfaceProvider: ISurfaceProvider;
+  public planarSupportBodyYByCorner: [number, number, number, number] = [0, 0, 0, 0];
 
   // Visual / Debug Options
   public showForceVectors3D: boolean = true;
@@ -74,6 +75,15 @@ export class Vehicle {
     );
 
     this.suspension = new SuspensionSystem();
+    // Direct Vehicle users get a sane fallback until SuspensionKinematicsAdapter
+    // derives the actual front/rear static roll-center support heights.
+    const fallbackPlanarSupportY = this.config.wheelRadius - this.config.centerOfGravityHeight;
+    this.planarSupportBodyYByCorner = [
+      fallbackPlanarSupportY,
+      fallbackPlanarSupportY,
+      fallbackPlanarSupportY,
+      fallbackPlanarSupportY,
+    ];
 
     // 2. Instantiate 4 Wheels [FL, FR, RL, RR]
     const tireRadius = this.config.wheelRadius;
@@ -410,11 +420,6 @@ export class Vehicle {
 
     // 2. Suspension ground clearance & solve 4-corner displacements and normal loads
     const hardpointsBody = this.getHardpointsBody();
-    // The world-vertical unsprung sliders need a body-fixed X/Z support plane.
-    // At nominal ride height the wheel center sits wheelRadius above the road while
-    // the CG sits centerOfGravityHeight above it.
-    const planarHubBodyY = this.config.wheelRadius - this.config.centerOfGravityHeight;
-
     const cornerCfgFront: SuspensionCornerConfig = {
       restLength: this.config.suspensionRestLength,
       springStiffness: this.config.suspensionStiffness * 1.05,
@@ -459,7 +464,7 @@ export class Vehicle {
       this.config.wheelRadius,
       this.config.tireVerticalStiffness,
       dt,
-      planarHubBodyY
+      this.planarSupportBodyYByCorner
     );
 
     // 3. Aerodynamics (Front & Rear Downforce, Drag, Diffuser Suction)
@@ -572,8 +577,8 @@ export class Vehicle {
 
       // This reduced suspension has one independent unsprung DOF: vertical hub
       // motion. In X/Z the hub and contact patch are constrained to a body-fixed
-      // support line through the nominal wheel-center plane. Their planar velocity
-      // must therefore be that support point's rigid-body velocity.
+      // support line through the suspension geometry's static roll-center plane.
+      // Their planar velocity must therefore be that support point's rigid-body velocity.
       //
       // contactWorld is a hybrid coordinate: X/Z follow the chassis support while
       // Y is road-constrained. It is not a material point of the rigid body.
@@ -581,7 +586,7 @@ export class Vehicle {
       // roll/pitch-rate contribution to tire slip during load-transfer transients.
       const planarSupportBody = PhysicsMath.vec3(
         hpBody.x,
-        planarHubBodyY,
+        this.planarSupportBodyYByCorner[i],
         hpBody.z
       );
       const vSupportBody = this.rigidBody.getPointVelocityBody(planarSupportBody);
