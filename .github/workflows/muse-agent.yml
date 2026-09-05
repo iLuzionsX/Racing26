@@ -1,52 +1,42 @@
-name: Muse Spark xhigh chassis wave
+name: Muse Spark xhigh tyre verification
 
 on:
   push:
     branches:
-      - physics/chassis-suspension-coupling-spinout
+      - physics/tyre-response-corner-balance
 
 permissions:
   contents: read
 
 jobs:
-  investigate:
+  verify:
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 3
       matrix:
         agent:
           - 1
           - 2
           - 3
-          - 4
-          - 5
-          - 6
-          - 7
-          - 8
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: node scripts/muse-agent/test.mjs
-      - name: Run xhigh chassis investigation
+      - name: Run Muse adversarial verification
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           AGENT_ID: ${{ matrix.agent }}
         run: |
-          node scripts/muse-agent/run.mjs --task "This command is authoritative. Current branch is PR #127 in iLuzionsX/Racing26. The user drove the preview and says the problem STILL happens: during some turns the box/chassis appears to slide off the suspension/wheels and this can precipitate a spinout. The previous contact-point kinematics fix was insufficient, so reopen diagnosis from first principles. Agent $AGENT_ID of 8. Assignment map: 1 = trace chassis/unsprung coupling and all body-hub-contact transforms for lateral reference-frame divergence, stale/double transforms, or X/Z decoupling. 2 = audit Suspension.ts, SuspensionKinematics.ts and SuspensionKinematicsAdapter.ts for hardpoint, travel, camber/toe, droop/bump, ARB, sign or discontinuity defects under roll+pitch+yaw+steer. 3 = audit per-wheel Fz, spring/damper/ARB force timing, wheel unload/lift, hard stops, cross-coupling and any load discontinuity that can trigger sudden oversteer. 4 = audit tire and suspension force application points, world/body conversions, road normals, lever arms and torques for mismatched frames, double moments, or missing reactions. 5 = audit the 120 Hz update order, state mutation and interpolation for stale/new state mixtures, one-step lags, feedback loops or phase error during turn-in/recovery. 6 = trace Vehicle.getState through SuspensionKinematicsAdapter, Simulation interpolation and CarRenderer to determine whether the visible chassis slide is a render geometry mismatch even if physics is stable; define a deterministic visual/geometry invariant. 7 = design the strongest deterministic full-car reproducer using turn-in, sustained corner, lift-off, trail brake, throttle exit, countersteer and kerb/runoff as useful; log chassis CG, orientation, hubs, contacts, travel, loads, sideslip, yaw and relative chassis-to-hub geometry. 8 = adversarial integrator: review PRs #124 #125 #126 and current #127, falsify likely diagnoses, rank root causes, and seek one mechanism explaining both visible chassis shift and spinout. Requirements for every agent: exact files inspected, concrete mechanism or explicit no-defect finding, deterministic reproduction/falsifier, expected before/after telemetry, mirrored left/right considerations, patch=null unless a defect is proven, exact tests, and regression risks. Do not hide the problem with extra grip, yaw damping, steering reduction, softer springs, hidden ESC, or test-only stabilization. Do not claim browser driving or tests you did not perform."
-      - name: Verify xhigh provider response
-        env:
-          AGENT_ID: ${{ matrix.agent }}
-        run: |
-          node -e "const fs=require('fs');const p=fs.readdirSync('.muse/artifacts').filter(x=>x.endsWith('.json')).sort().pop();if(!p)throw Error('missing artifact');const a=JSON.parse(fs.readFileSync('.muse/artifacts/'+p,'utf8'));console.log(JSON.stringify({agent:process.env.AGENT_ID,model:a.model,requested:a.requested_reasoning_effort,response:a.response_reasoning_effort,status:a.status}));if(a.model!=='muse-spark-1.3-contributor-free'||a.requested_reasoning_effort!=='xhigh'||a.response_reasoning_effort!=='xhigh')throw Error('xhigh provider configuration not confirmed');"
+          node scripts/muse-agent/run.mjs --task "This command is authoritative; .github files are intentionally excluded from the agent snapshot, so do not ask for or block on a task file. Verify the current branch after the WheelDynamics transient combined-slip limiter was changed from a single circular resultant clamp to the same axis-aware superellipse semantics returned by TireModel. Goal: progressive/readable/catchable limit behavior without changing peak grip, steering, yaw damping, assists, suspension, or drivetrain. Agent $AGENT_ID of 3: Agent 1 inspect TireModel + WheelDynamics for mathematical consistency, continuity, symmetry, and any force-limit regression. Agent 2 inspect full-car transient consequences: brake-release, throttle-on, countersteer, oversteer recovery, high-speed spin, load transfer and differential interactions; identify any mechanism that could make the change less stable or unrealistic. Agent 3 act as adversarial reviewer: try to falsify the change, look for low-speed/rolling-resistance/anisotropic-limit edge cases and telemetry-semantic errors, and propose a patch only for a clear defect. Do not tune grip or add hidden stabilization. Return exact files inspected, findings, tests/falsifiers, risks, and patch=null unless a concrete defect is proven."
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: muse-chassis-xhigh-agent-${{ matrix.agent }}
+          name: muse-tyre-verification-agent-${{ matrix.agent }}
           path: .muse/artifacts/
           if-no-files-found: error
           retention-days: 7
