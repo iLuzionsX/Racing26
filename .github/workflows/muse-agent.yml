@@ -1,42 +1,56 @@
-name: Muse Spark xhigh tyre verification
+name: Muse Spark 1.3 xhigh chassis investigation
 
 on:
   push:
     branches:
-      - physics/tyre-response-corner-balance
+      - physics/chassis-suspension-coupling-spinout
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  investigate:
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 8
       matrix:
-        agent:
-          - 1
-          - 2
-          - 3
+        agent: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: node scripts/muse-agent/test.mjs
-      - name: Run Muse adversarial verification
+      - name: Run Muse Spark chassis specialist
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           AGENT_ID: ${{ matrix.agent }}
         run: |
-          node scripts/muse-agent/run.mjs --task "This command is authoritative; .github files are intentionally excluded from the agent snapshot, so do not ask for or block on a task file. Verify the current branch after the WheelDynamics transient combined-slip limiter was changed from a single circular resultant clamp to the same axis-aware superellipse semantics returned by TireModel. Goal: progressive/readable/catchable limit behavior without changing peak grip, steering, yaw damping, assists, suspension, or drivetrain. Agent $AGENT_ID of 3: Agent 1 inspect TireModel + WheelDynamics for mathematical consistency, continuity, symmetry, and any force-limit regression. Agent 2 inspect full-car transient consequences: brake-release, throttle-on, countersteer, oversteer recovery, high-speed spin, load transfer and differential interactions; identify any mechanism that could make the change less stable or unrealistic. Agent 3 act as adversarial reviewer: try to falsify the change, look for low-speed/rolling-resistance/anisotropic-limit edge cases and telemetry-semantic errors, and propose a patch only for a clear defect. Do not tune grip or add hidden stabilization. Return exact files inspected, findings, tests/falsifiers, risks, and patch=null unless a concrete defect is proven."
+          case "$AGENT_ID" in
+            1) FOCUS="CHASSIS/UNSPRUNG COUPLING. Trace every authoritative body, suspension, hub, and contact transform. Look specifically for body/wheel reference-frame divergence, duplicated or stale transforms, lateral hub migration applied only to rendering, and any state that lets the chassis move independently of the suspension in X/Z." ;;
+            2) FOCUS="SUSPENSION KINEMATICS. Audit Suspension.ts, SuspensionKinematics.ts, SuspensionKinematicsAdapter.ts, hardpoints, travel, camber/toe, anti-roll behavior, droop/bump limits, and body-to-wheel transforms under simultaneous roll, pitch, yaw, and steer. Seek discontinuities/sign errors rather than tuning." ;;
+            3) FOCUS="LOAD TRANSFER / NORMAL LOAD. Audit per-corner Fz, spring/damper/ARB force timing, wheel unloading/lift, hard stops, anti-roll cross-coupling, and whether a transient load discontinuity can create sudden oversteer or an apparent chassis slide." ;;
+            4) FOCUS="FORCE APPLICATION / MOMENT ARMS. Audit tire forces, suspension reactions, application points, coordinate transforms, road normals, and torque construction. Try to find a world/body frame mismatch, double moment, missing reaction, or lateral force lever arm that becomes wrong as the body rolls." ;;
+            5) FOCUS="INTEGRATION / UPDATE ORDER. Audit the fixed 120 Hz step order across steering, suspension, tire, rigid body, interpolation, and state adapters. Find stale-vs-new state mixtures, one-step lags, mutation ordering, or feedback loops that can create a sudden chassis/suspension phase error during turn-in or recovery." ;;
+            6) FOCUS="RENDER / VISUAL COUPLING. Trace Vehicle.getState -> SuspensionKinematicsAdapter -> Simulation interpolation -> CarRenderer wheel/chassis transforms. Determine whether the observed body sliding off suspension can be a visual transform mismatch even when physics is stable. Propose a deterministic geometry invariant and patch only a proven defect." ;;
+            7) FOCUS="REPRO / STRESS TEST. Build the strongest deterministic full-car reproducer for the user's symptom using rapid turn-in, sustained cornering, lift-off, trail brake, throttle-on exit, countersteer, and kerb/runoff where useful. Log chassis CG, roll/pitch/yaw, hub/contact positions, suspension travel, wheel loads, sideslip, yaw rate, and relative chassis-to-hub geometry. Identify a baseline failure signature." ;;
+            8) FOCUS="ADVERSARIAL INTEGRATOR. Treat the prior contact-point fix as insufficient. Review recent PRs #124 #125 #126 and current #127. Try to falsify every likely diagnosis, rank root causes by evidence, look for a mechanism that explains BOTH the visible chassis shift and spinout, and propose the smallest production patch plus regression only when justified." ;;
+          esac
+          node scripts/muse-agent/run.mjs --task "Current branch is PR #127 in iLuzionsX/Racing26. The user drove the existing preview and reports the problem STILL happens: during some turns the box/chassis appears to slide off the suspension/wheels and this can precipitate a spinout. The previous fix aligned tire slip velocity with the actual contact patch, but hands-on testing says it did not solve the symptom. Re-open diagnosis from first principles. $FOCUS
+
+Requirements: inspect exact code paths; identify a concrete mechanism or explicit no-defect finding; give a deterministic reproduction/falsifier; quantify expected before/after telemetry; cover mirrored left/right cases; do not mask the bug with more grip, yaw damping, steering reduction, hidden ESC, softer springs, or test-only stabilization; preserve valid work from PRs #124/#125/#126 unless evidence disproves it; return patch=null unless you can prove a defect. If proposing a patch, keep it minimal and include exact regression tests. Do not claim runtime/browser tests you did not perform."
+      - name: Verify provider configuration
+        env:
+          AGENT_ID: ${{ matrix.agent }}
+        run: |
+          node -e "const fs=require('fs');const p=fs.readdirSync('.muse/artifacts').filter(x=>x.endsWith('.json')).sort().pop();if(!p)throw Error('missing Muse artifact');const a=JSON.parse(fs.readFileSync('.muse/artifacts/'+p,'utf8'));console.log(JSON.stringify({agent:process.env.AGENT_ID,model:a.model,requested:a.requested_reasoning_effort,response:a.response_reasoning_effort,status:a.status}));if(a.model!=='muse-spark-1.3-contributor-free'||a.requested_reasoning_effort!=='xhigh'||a.response_reasoning_effort!=='xhigh')throw Error('Muse Spark 1.3 xhigh was not confirmed');"
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: muse-tyre-verification-agent-${{ matrix.agent }}
+          name: muse-chassis-xhigh-agent-${{ matrix.agent }}
           path: .muse/artifacts/
           if-no-files-found: error
           retention-days: 7
