@@ -1,6 +1,6 @@
 const ENDPOINT = 'https://opencode.ai/zen/v1/responses';
 const MODEL = 'muse-spark-1.3-contributor-free';
-const REASONING_EFFORT = 'max';
+const REASONING_EFFORT = 'xhigh';
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 export class ZenError extends Error {
