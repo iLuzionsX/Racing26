@@ -42,6 +42,7 @@ export class Vehicle {
   public aero: AerodynamicsSystem;
   public telemetry: TelemetrySystem;
   public surfaceProvider: ISurfaceProvider;
+  public planarSupportBodyYByCorner: [number, number, number, number] = [0, 0, 0, 0];
 
   // Visual / Debug Options
   public showForceVectors3D: boolean = true;
@@ -74,6 +75,15 @@ export class Vehicle {
     );
 
     this.suspension = new SuspensionSystem();
+    // Direct Vehicle users get a sane fallback until SuspensionKinematicsAdapter
+    // derives the actual front/rear static roll-center support heights.
+    const fallbackPlanarSupportY = this.config.wheelRadius - this.config.centerOfGravityHeight;
+    this.planarSupportBodyYByCorner = [
+      fallbackPlanarSupportY,
+      fallbackPlanarSupportY,
+      fallbackPlanarSupportY,
+      fallbackPlanarSupportY,
+    ];
 
     // 2. Instantiate 4 Wheels [FL, FR, RL, RR]
     const tireRadius = this.config.wheelRadius;
@@ -410,7 +420,6 @@ export class Vehicle {
 
     // 2. Suspension ground clearance & solve 4-corner displacements and normal loads
     const hardpointsBody = this.getHardpointsBody();
-
     const cornerCfgFront: SuspensionCornerConfig = {
       restLength: this.config.suspensionRestLength,
       springStiffness: this.config.suspensionStiffness * 1.05,
@@ -454,7 +463,8 @@ export class Vehicle {
       this.config.antiRollCrossCoupling,
       this.config.wheelRadius,
       this.config.tireVerticalStiffness,
-      dt
+      dt,
+      this.planarSupportBodyYByCorner
     );
 
     // 3. Aerodynamics (Front & Rear Downforce, Drag, Diffuser Suction)
@@ -564,11 +574,25 @@ export class Vehicle {
       // point fixed at road height. Lateral slip keeps the established contact-patch
       // kinematics. This targets only the measured near-zero pitch-rebound artifact.
       const contactWorld = suspState.contactPointWorld;
-      const contactPointBody = PhysicsMath.vec3(
+
+      // This reduced suspension has one independent unsprung DOF: vertical hub
+      // motion. In X/Z the hub and contact patch are constrained to a body-fixed
+      // support line through the suspension geometry's static roll-center plane.
+      // Their planar velocity must therefore be that support point's rigid-body velocity.
+      //
+      // contactWorld is a hybrid coordinate: X/Z follow the chassis support while
+      // Y is road-constrained. It is not a material point of the rigid body.
+      // Treating its instantaneous body coordinates as rigid invents an extra
+      // roll/pitch-rate contribution to tire slip during load-transfer transients.
+      const planarSupportBody = PhysicsMath.vec3(
         hpBody.x,
-        -this.config.centerOfGravityHeight,
+        this.planarSupportBodyYByCorner[i],
         hpBody.z
       );
+      const vSupportBody = this.rigidBody.getPointVelocityBody(planarSupportBody);
+
+      // Preserve the existing brake-held near-stop longitudinal proxy. Normal
+      // cornering uses the support's planar velocity above.
       const hubWorld = PhysicsMath.vec3(
         contactWorld.x,
         suspState.hubPositionWorldY,
@@ -576,16 +600,15 @@ export class Vehicle {
       );
       const hubArmWorld = PhysicsMath.vec3Sub(hubWorld, this.rigidBody.position);
       const hubPointBody = PhysicsMath.quatInverseRotateVec3(this.rigidBody.orientation, hubArmWorld);
-      const vContactBody = this.rigidBody.getPointVelocityBody(contactPointBody);
       const vHubBody = this.rigidBody.getPointVelocityBody(hubPointBody);
 
       // Rotate velocity into wheel heading coordinate frame (steer angle about Y)
       const steer = wheel.steerAngle;
       const cosS = Math.cos(steer);
       const sinS = Math.sin(steer);
-      const vxContact = vContactBody.x * sinS + vContactBody.z * cosS;
+      const vxContact = vSupportBody.x * sinS + vSupportBody.z * cosS;
       const vxHub = vHubBody.x * sinS + vHubBody.z * cosS;
-      const vyWheel = vContactBody.x * cosS - vContactBody.z * sinS;
+      const vyWheel = vSupportBody.x * cosS - vSupportBody.z * sinS;
       const hydraulicBrakeTorque = brakeTorques.hydraulicTorques[i];
       const handbrakeTorque = brakeTorques.handbrakeTorques[i];
       const brakeRequest = Math.max(0, hydraulicBrakeTorque) + Math.max(0, handbrakeTorque);

@@ -4,6 +4,7 @@ import {
   createVirtualSuspensionCornerGeometry,
   normalizeHeadingDelta,
   solveSuspensionKinematics,
+  staticRollCenterBodyY,
   transformForceToCommandFrame,
   transformVelocityToKinematicFrame,
   type SuspensionCornerGeometry,
@@ -73,6 +74,10 @@ export class SuspensionKinematicsAdapter {
         ),
       });
     }) as SuspensionKinematicsAdapter['geometries'];
+
+    this.vehicle.planarSupportBodyYByCorner = this.geometries.map(
+      staticRollCenterBodyY
+    ) as [number, number, number, number];
 
     this.reset();
   }

@@ -139,6 +139,38 @@ function computeUnsteeredState(
   return { lower, upper, axis, hub, camberRad };
 }
 
+export function staticRollCenterBodyY(geometry: SuspensionCornerGeometry): number {
+  // Front-view instant center: intersection of lower- and upper-arm lines.
+  const a = geometry.lowerInnerBody;
+  const b = geometry.lowerBallJointAtRestBody;
+  const c = geometry.upperInnerBody;
+  const d = geometry.upperBallJointAtRestBody;
+  const denominator =
+    (a.x - b.x) * (c.y - d.y) -
+    (a.y - b.y) * (c.x - d.x);
+
+  const contactY = geometry.hubCenterAtRestBody.y - geometry.wheelRadiusM;
+  if (Math.abs(denominator) < 1e-10) return contactY;
+
+  const abCross = a.x * b.y - a.y * b.x;
+  const cdCross = c.x * d.y - c.y * d.x;
+  const instantX =
+    (abCross * (c.x - d.x) - (a.x - b.x) * cdCross) /
+    denominator;
+  const instantY =
+    (abCross * (c.y - d.y) - (a.y - b.y) * cdCross) /
+    denominator;
+
+  const contactX = geometry.hubCenterAtRestBody.x;
+  const dx = instantX - contactX;
+  if (Math.abs(dx) < 1e-10) return contactY;
+
+  // Line from tire contact patch to instant center, evaluated at vehicle centerline X=0.
+  const t = -contactX / dx;
+  const rollCenterY = contactY + (instantY - contactY) * t;
+  return Number.isFinite(rollCenterY) ? rollCenterY : contactY;
+}
+
 function fitCircleCenter2D(a: Vec3, b: Vec3, c: Vec3): { x: number; y: number } {
   const d = 2 * (
     a.x * (b.y - c.y) +

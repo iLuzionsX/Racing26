@@ -2,6 +2,7 @@ import { PhysicsMath } from '../math/PhysicsMath';
 import {
   createVirtualSuspensionCornerGeometry,
   solveSuspensionKinematics,
+  staticRollCenterBodyY,
   transformForceToCommandFrame,
   transformVelocityToKinematicFrame,
 } from '../SuspensionKinematics';
@@ -34,6 +35,21 @@ const fl = makeFront(true);
 const fr = makeFront(false);
 assertNear(fl.derivedCamberGainDegPerMeter, -7.5, 0.05, 'front camber-gain fit missed target');
 assertNear(fr.derivedCamberGainDegPerMeter, -7.5, 0.05, 'mirrored front camber-gain fit missed target');
+
+const flRollCenterBodyY = staticRollCenterBodyY(fl);
+const frRollCenterBodyY = staticRollCenterBodyY(fr);
+const flContactBodyY = fl.hubCenterAtRestBody.y - fl.wheelRadiusM;
+const frontRollCenterHeightM = flRollCenterBodyY - flContactBodyY;
+assertNear(
+  flRollCenterBodyY,
+  frRollCenterBodyY,
+  1e-9,
+  'front static roll center must mirror left/right'
+);
+assert(
+  frontRollCenterHeightM > 0.02 && frontRollCenterHeightM < 0.12,
+  `front static roll-center height is implausible: ${frontRollCenterHeightM} m`
+);
 
 // Regression for the tuning UI's mild-camber-gain end. The virtual hardpoint
 // fitter must be able to represent 2 deg/m rather than bottoming out around 3 deg/m.
@@ -125,6 +141,7 @@ assertNear(PhysicsMath.vec3Length(flSteered.upBody), 1, 1e-9, 'wheel up basis is
 console.log(JSON.stringify({
   static: {
     camberDeg: flStatic.camberDeg,
+    rollCenterHeightMm: frontRollCenterHeightM * 1000,
     casterDeg: flStatic.casterDeg,
     kingpinInclinationDeg: flStatic.kingpinInclinationDeg,
     scrubRadiusMm: flStatic.scrubRadiusM * 1000,

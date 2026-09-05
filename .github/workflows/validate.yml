@@ -59,6 +59,12 @@ jobs:
       - name: High-speed keyboard cornering
         run: npm run test:keyboard-cornering
 
+      - name: Crash stability regression
+        run: npm run test:crash
+
+      - name: Crash recovery regression
+        run: npm run test:crash-recovery
+
       - name: M5 oversteer recovery
         run: npm run test:m5-oversteer
 
