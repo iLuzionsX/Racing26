@@ -112,7 +112,7 @@ export function collectContext(rootDir) {
     if (shouldInclude(repoPath, stat)) files.push({ path: repoPath, bytes: stat.size, content: fs.readFileSync(absolute, 'utf8') });
   }
 
-  const priority = new Map(['AGENTS.md', 'PHYSICS_CONVENTIONS.md', 'M5_VALIDATION.md', 'package.json', 'vite.config.ts', 'tsconfig.json'].map((p, i) => [p, i]));
+  const priority = new Map(["AGENTS.md","PHYSICS_CONVENTIONS.md","M5_VALIDATION.md","package.json","src/types.ts","src/physics/Vehicle.ts","src/physics/WheelDynamics.ts","src/physics/TireModel.ts","src/physics/Differential.ts","src/physics/DriverAids.ts","src/physics/Simulation.ts","src/physics/RigidBody.ts","src/physics/m5G90.ts","src/physics/vehiclePhysics.ts","src/physics/ChassisMassProperties.ts","src/physics/Suspension.ts","src/physics/SuspensionKinematics.ts","src/physics/SuspensionKinematicsAdapter.ts","src/physics/Powertrain.ts","src/physics/Aero.ts","src/physics/SurfaceProvider.ts","src/physics/tests/HighSpeedAntiRollTests.ts","src/physics/tests/M5OversteerRecoveryDiagnostic.ts","src/physics/tests/M5TransientResponseTests.ts","src/physics/tests/DigitalSteeringInputTests.ts","src/App.tsx","src/components/mobileControls.ts","src/components/MobileSteeringWheel.tsx"].map((p, i) => [p, i]));
   files.sort((a, b) => (priority.get(a.path) ?? 100) - (priority.get(b.path) ?? 100) || a.path.localeCompare(b.path));
 
   const selected = [];
