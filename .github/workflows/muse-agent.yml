@@ -1,22 +1,25 @@
 name: Muse Spark delegated agent
 
 on:
-  workflow_dispatch:
-    inputs:
-      task:
-        description: Focused engineering objective for the BMW M5 driving lab
-        required: true
-        type: string
-  pull_request:
-    types: [opened, synchronize]
+  push:
+    branches:
+      - physics/tyre-response-corner-balance
     paths:
       - .github/muse-task.txt
       - .github/workflows/muse-agent.yml
       - scripts/muse-agent/zen.mjs
       - scripts/muse-agent/run.mjs
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Focused engineering objective for the BMW M5 driving lab
+        required: false
+        type: string
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   verify-config:
@@ -35,6 +38,7 @@ jobs:
         run: |
           node scripts/muse-agent/run.mjs --task "CONFIGURATION PROBE ONLY. Return JSON with summary='config probe', patch=null, no proposed files, no tests, and no repository recommendations."
       - name: Require exact model and returned max effort
+        id: verify
         run: |
           node <<'NODE'
           const fs = require('node:fs');
@@ -46,6 +50,26 @@ jobs:
           if (a.requested_reasoning_effort !== 'max') throw new Error('Muse request did not pin max reasoning.');
           if (a.response_reasoning_effort !== 'max') throw new Error('Provider did not confirm max reasoning; refusing fanout.');
           NODE
+      - name: Post configuration evidence
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          node <<'NODE' >/tmp/probe.txt
+          const fs = require('node:fs');
+          let evidence = {error:'no artifact'};
+          try {
+            const file = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort().at(-1);
+            if (file) {
+              const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + file, 'utf8'));
+              evidence = {model:a.model, requested_reasoning_effort:a.requested_reasoning_effort, response_reasoning_effort:a.response_reasoning_effort, status:a.status};
+            }
+          } catch (e) { evidence = {error:String(e)}; }
+          process.stdout.write('MUSE_CONFIG_PROBE run=' + process.env.RUN_ID + '\n\n' + JSON.stringify(evidence, null, 2));
+          NODE
+          gh api "repos/$REPO/issues/126/comments" -f body="$(cat /tmp/probe.txt)"
 
   investigate:
     needs: verify-config
@@ -66,8 +90,10 @@ jobs:
       - name: Run read-only investigation
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
+          DISPATCH_TASK: ${{ github.event.inputs.task }}
         run: |
-          BASE_TASK="$(cat .github/muse-task.txt)"
+          BASE_TASK="$DISPATCH_TASK"
+          if [ -z "$BASE_TASK" ]; then BASE_TASK="$(cat .github/muse-task.txt)"; fi
           case "${{ matrix.agent }}" in
             1) FOCUS="INDEPENDENT DIAGNOSIS A. Independently trace one reproducible abrupt-grip/spinout scenario from tire slip kinematics through tire forces and chassis response. Do not read or infer other agents' conclusions. Required evidence: reproduction, code paths, causal chain, measurements/measurement plan, falsifier, smallest correction." ;;
             2) FOCUS="INDEPENDENT DIAGNOSIS B. Independently investigate the same class of abrupt limit behavior, emphasizing pure/combined-slip force curves, peak/post-peak recovery, relaxation, and low-speed numerical transitions. Do not read or infer other agents' conclusions. Return the same required evidence." ;;
@@ -81,17 +107,34 @@ jobs:
           node scripts/muse-agent/run.mjs --task "Agent ${{ matrix.agent }} of 8. $FOCUS
 
 $BASE_TASK"
-      - name: Print Muse artifact
+      - name: Post investigation report
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          AGENT: ${{ matrix.agent }}
         run: |
-          echo "===== MUSE_ARTIFACT_BEGIN agent=${{ matrix.agent }} ====="
-          for file in .muse/artifacts/*.json; do [ -f "$file" ] && cat "$file"; done
-          echo "===== MUSE_ARTIFACT_END agent=${{ matrix.agent }} ====="
-      - name: Upload Muse artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: muse-tyre-investigation-${{ matrix.agent }}
-          path: .muse/artifacts/
-          if-no-files-found: error
-          retention-days: 7
+          node <<'NODE' >/tmp/report.txt
+          const fs = require('node:fs');
+          const id = process.env.AGENT;
+          let payload = {error:'agent produced no artifact'};
+          try {
+            const file = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort().at(-1);
+            if (file) {
+              const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + file, 'utf8'));
+              payload = {
+                model:a.model,
+                requested_reasoning_effort:a.requested_reasoning_effort,
+                response_reasoning_effort:a.response_reasoning_effort,
+                status:a.status,
+                task:a.task,
+                result:a.result
+              };
+            }
+          } catch (e) { payload = {error:String(e)}; }
+          let text = 'MUSE_TYRE_AGENT_' + id + ' run=' + process.env.RUN_ID + '\n\n' + JSON.stringify(payload, null, 2);
+          if (text.length > 62000) text = text.slice(0, 62000) + '\n[truncated]';
+          process.stdout.write(text);
+          NODE
+          gh api "repos/$REPO/issues/126/comments" -f body="$(cat /tmp/report.txt)"
