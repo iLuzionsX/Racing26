@@ -323,7 +323,7 @@ export class SuspensionSystem {
     wheelRadius: number,
     tireVerticalStiffness: number,
     dt: number,
-    planarHubBodyY: number = 0
+    planarSupportBodyY: number | [number, number, number, number] = 0
   ) {
     if (dt <= 0) return;
 
@@ -348,13 +348,16 @@ export class SuspensionSystem {
       const hardpointVelocityWorld = PhysicsMath.vec3Add(bodyVelocityWorld, angularPointVelocity);
 
       // The unsprung model is a world-vertical slider, so its independent state is
-      // Y only. X/Z still need a body-fixed support line. Anchor that line at the
-      // nominal wheel-center plane, not at the suspension top mount. Rotating the
-      // top-mount height into X/Z made the wheels sweep laterally by centimeters
-      // relative to the wheel arches as the chassis rolled.
+      // Y only. X/Z still need a body-fixed support line. The kinematics adapter
+      // supplies the suspension geometry's static roll-center height per corner.
+      // Rotating the top-mount height into X/Z made the wheels sweep laterally by
+      // centimeters relative to the wheel arches as the chassis rolled.
+      const supportBodyY = Array.isArray(planarSupportBodyY)
+        ? planarSupportBodyY[i]
+        : planarSupportBodyY;
       const planarSupportBody = PhysicsMath.vec3(
         hardpointsBody[i].x,
-        planarHubBodyY,
+        supportBodyY,
         hardpointsBody[i].z
       );
       const planarSupportWorldOffset = PhysicsMath.quatRotateVec3(
