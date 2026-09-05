@@ -42,7 +42,12 @@
     "test:high-speed": "tsx src/physics/tests/HighSpeedAntiRollTests.ts",
     "test:m5-validation": "tsx src/physics/validation/M5ValidationSuite.ts --test=determinism,static-loads,mass-properties-moments,acceleration,rapid-reversal,slalom,lift-throttle --artifacts=artifacts/m5-validation/base && tsx src/physics/validation/M5ValidationRunner.ts",
     "test:m5-validation:strict": "tsx src/physics/validation/M5ValidationSuite.ts --test=determinism,static-loads,mass-properties-moments,acceleration,rapid-reversal,slalom,lift-throttle --artifacts=artifacts/m5-validation/base && tsx src/physics/validation/M5ValidationRunner.ts --strict",
-    "test:m5-validation:list": "tsx src/physics/validation/M5ValidationSuite.ts --list"
+    "test:m5-validation:list": "tsx src/physics/validation/M5ValidationSuite.ts --list",
+    "test:high-speed-steering": "tsx src/physics/tests/HighSpeedSteeringInputTests.ts",
+    "test:high-speed-spin": "tsx src/physics/tests/HighSpeedSpinRegressionTests.ts",
+    "test:digital-steering-fps": "tsx src/physics/tests/DigitalSteeringFrameRateInvarianceTests.ts",
+    "test:analog-steering-fps": "tsx src/physics/tests/AnalogSteeringFrameRateInvarianceTests.ts",
+    "test:keyboard-cornering": "tsx src/physics/tests/HighSpeedKeyboardCorneringTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

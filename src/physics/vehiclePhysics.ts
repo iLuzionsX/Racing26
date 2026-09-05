@@ -4,7 +4,7 @@
  */
 
 import { VehicleConfig, VehicleState, ControlInputs } from '../types';
-import { Simulation } from './Simulation';
+import { Simulation, type SimulationControlInputs } from './Simulation';
 import { Vehicle } from './Vehicle';
 import { ProvingGroundSurfaceProvider, SurfaceSample } from './SurfaceProvider';
 import { HeadlessTestRunner, TestResult } from './tests/HeadlessTestRunner';
@@ -149,7 +149,7 @@ export class VehiclePhysicsEngine {
   }
 
   /** Advance the 120 Hz fixed accumulator physics with state interpolation. */
-  public update(deltaTime: number, inputs: ControlInputs): VehicleState {
+  public update(deltaTime: number, inputs: SimulationControlInputs): VehicleState {
     return this.hydrateAppState(this.simulation.advance(deltaTime, inputs));
   }
 

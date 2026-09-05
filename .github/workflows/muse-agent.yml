@@ -1,126 +1,42 @@
-name: Muse Spark delegated agent
+name: Muse Spark xhigh tyre verification
 
 on:
-  workflow_dispatch:
-    inputs:
-      task:
-        description: Focused engineering objective for the BMW M5 driving lab
-        required: true
-        type: string
   push:
     branches:
-      - main
-    paths:
-      - .github/muse-task.txt
-  pull_request:
-    types:
-      - opened
-      - synchronize
-    paths:
-      - .github/muse-task.txt
+      - physics/tyre-response-corner-balance
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  delegate:
+  verify:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        agent:
+          - 1
+          - 2
+          - 3
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Test Muse guardrails
-        run: node scripts/muse-agent/test.mjs
-
-      - name: Run Muse Spark delegation
+      - run: node scripts/muse-agent/test.mjs
+      - name: Run Muse adversarial verification
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-          DISPATCH_TASK: ${{ github.event.inputs.task }}
+          AGENT_ID: ${{ matrix.agent }}
         run: |
-          MUSE_TASK="$DISPATCH_TASK"
-          if [ -z "$MUSE_TASK" ]; then
-            MUSE_TASK="$(cat .github/muse-task.txt)"
-          fi
-          node scripts/muse-agent/run.mjs --task "$MUSE_TASK"
-
-      - name: Materialize and validate Muse patch
-        if: success()
-        env:
-          MUSE_BRANCH: muse-review-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          artifact="$(ls -1t .muse/artifacts/*.json 2>/dev/null | head -n 1)"
-          if [ -z "$artifact" ]; then
-            echo "No Muse artifact found; nothing to materialize."
-            exit 0
-          fi
-
-          node - "$artifact" <<'NODE' > /tmp/muse.patch
-          const fs = require('node:fs');
-          const artifactPath = process.argv[2];
-          const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-          process.stdout.write(artifact?.result?.patch || '');
-          NODE
-
-          if [ ! -s /tmp/muse.patch ]; then
-            echo "Muse returned no patch; leaving this run advisory-only."
-            exit 0
-          fi
-
-          # Large model-generated diffs sometimes retain one formatting space before
-          # subsequent git metadata lines. Strip only that impossible metadata prefix;
-          # never touch ordinary source lines. --recount then recomputes inaccurate
-          # hunk line counts while still requiring the actual context to match.
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = '/tmp/muse.patch';
-          let patch = fs.readFileSync(path, 'utf8');
-          patch = patch.replace(/^ (?=(?:diff --git |--- |\+\+\+ |@@ ))/gm, '');
-          fs.writeFileSync(path, patch);
-          NODE
-
-          git apply --check --recount /tmp/muse.patch
-          git apply --recount /tmp/muse.patch
-
-          npm install --no-package-lock --no-audit --no-fund
-          node scripts/muse-agent/test.mjs
-          npm run test:conventions
-          npm run test:m5-validation:strict
-          npm run build
-
-          git config user.name "muse-review-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git switch -c "$MUSE_BRANCH"
-          git add -A -- src public index.html
-          if git diff --cached --quiet; then
-            echo "Muse patch produced no repository changes."
-            exit 0
-          fi
-          git commit -m "Muse review ${GITHUB_RUN_ID}"
-          git push origin "HEAD:refs/heads/$MUSE_BRANCH"
-          echo "Review branch: $MUSE_BRANCH"
-
-      - name: Print Muse review artifact
-        if: always()
-        run: |
-          echo "===== MUSE_ARTIFACT_BEGIN ====="
-          for file in .muse/artifacts/*.json; do
-            [ -f "$file" ] || continue
-            cat "$file"
-          done
-          echo "===== MUSE_ARTIFACT_END ====="
-
-      - name: Upload Muse review artifact
+          node scripts/muse-agent/run.mjs --task "This command is authoritative; .github files are intentionally excluded from the agent snapshot, so do not ask for or block on a task file. Verify the current branch after the WheelDynamics transient combined-slip limiter was changed from a single circular resultant clamp to the same axis-aware superellipse semantics returned by TireModel. Goal: progressive/readable/catchable limit behavior without changing peak grip, steering, yaw damping, assists, suspension, or drivetrain. Agent $AGENT_ID of 3: Agent 1 inspect TireModel + WheelDynamics for mathematical consistency, continuity, symmetry, and any force-limit regression. Agent 2 inspect full-car transient consequences: brake-release, throttle-on, countersteer, oversteer recovery, high-speed spin, load transfer and differential interactions; identify any mechanism that could make the change less stable or unrealistic. Agent 3 act as adversarial reviewer: try to falsify the change, look for low-speed/rolling-resistance/anisotropic-limit edge cases and telemetry-semantic errors, and propose a patch only for a clear defect. Do not tune grip or add hidden stabilization. Return exact files inspected, findings, tests/falsifiers, risks, and patch=null unless a concrete defect is proven."
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: muse-spark-result
+          name: muse-tyre-verification-agent-${{ matrix.agent }}
           path: .muse/artifacts/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
