@@ -175,6 +175,15 @@ assert(
 );
 assert(maxCrashAngularSpeed <= 12.01, `wipeout angular speed exceeded crash ceiling: ${maxCrashAngularSpeed}`);
 
+const finalCrashState = crashSim.vehicle.getState();
+const finalCrashEuler = crashSim.vehicle.rigidBody.getEuler();
+const finalCrashTotalFzN = finalCrashState.wheels.reduce((sum, wheel) => sum + wheel.forceVectorNorm, 0);
+const finalCrashAirborneCount = finalCrashState.wheels.filter((wheel) => wheel.isAirborne).length;
+const finalCrashTipDeg = Math.max(
+  Math.abs(finalCrashEuler.pitch),
+  Math.abs(finalCrashEuler.roll)
+) * 180 / Math.PI;
+
 console.log(JSON.stringify({
   uprightSpin: {
     maxAngularSpeedRadS: maxSpinAngularSpeed,
@@ -190,6 +199,10 @@ console.log(JSON.stringify({
     maxPostStepPenetrationM,
     maxAngularSpeedRadS: maxCrashAngularSpeed,
     maxHeaveM: maxCrashHeaveM,
+    finalHeaveM: finalCrashState.heave,
+    finalTipDeg: finalCrashTipDeg,
+    finalTotalTireLoadN: finalCrashTotalFzN,
+    finalAirborneCount: finalCrashAirborneCount,
     nonFiniteSamples: crashNonFinite,
   },
   status: 'passed',
