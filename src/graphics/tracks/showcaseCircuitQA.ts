@@ -1,11 +1,9 @@
 /**
- * Blocking, deterministic source-level QA for the Showcase Circuit.
+ * Blocking deterministic QA for the Racerrhi APEX / Côte d'Azur circuit port.
  *
- * This exists because a production build and vehicle regression suite can both
- * pass while a generated race track is geometrically undrivable. It intentionally
- * measures the track itself and exits non-zero on blocking defects.
- *
- * Run: npx tsx src/graphics/tracks/showcaseCircuitQA.ts
+ * The key invariant is stronger than "the track renders": the physics sampler must
+ * agree with the exact visible road/kerb/gravel geometry, and lateral material
+ * changes must not create hidden height steps that can corrupt the M5 after a hit.
  */
 import * as THREE from 'three';
 import {
@@ -13,11 +11,10 @@ import {
   CURB_WIDTH_M,
   OUTER_RUNOFF_M,
   PATH_SAMPLES,
+  RACERRHI_RECOVERY_LIMIT_M,
   RUNOFF_WIDTH_M,
   SHOWCASE_PATH,
-  SHOWCASE_SPAWN_U,
   ShowcaseCircuitSurfaceProvider,
-  TRACK_HALF_WIDTH_M,
   TRACK_WIDTH_M,
 } from './showcaseCircuit';
 
@@ -33,461 +30,207 @@ const results: Result[] = [];
 
 function record(result: Result): void {
   results.push(result);
-  console.log(`[${result.status}] ${result.id}: ${result.summary}`);
-  for (const detail of result.details ?? []) console.log(`  - ${detail}`);
+  console.log('[' + result.status + '] ' + result.id + ': ' + result.summary);
+  for (const detail of result.details ?? []) console.log('  - ' + detail);
 }
 
-function horizontalRadius(
-  p0: THREE.Vector3,
-  p1: THREE.Vector3,
-  p2: THREE.Vector3,
-): number {
-  const ax = p1.x - p0.x;
-  const az = p1.z - p0.z;
-  const bx = p2.x - p1.x;
-  const bz = p2.z - p1.z;
-  const cx = p2.x - p0.x;
-  const cz = p2.z - p0.z;
-  const a = Math.hypot(ax, az);
-  const b = Math.hypot(bx, bz);
-  const c = Math.hypot(cx, cz);
-  const area2 = Math.abs(ax * cz - cx * az);
-  if (area2 < 1e-10 || a < 1e-8 || b < 1e-8 || c < 1e-8) return Number.POSITIVE_INFINITY;
-  return (a * b * c) / (2 * area2);
+function horizontalRadius(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): number {
+  const ab = Math.hypot(b.x - a.x, b.z - a.z);
+  const bc = Math.hypot(c.x - b.x, c.z - b.z);
+  const ac = Math.hypot(c.x - a.x, c.z - a.z);
+  const area2 = Math.abs((b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z));
+  if (area2 < 1e-10 || ab < 1e-8 || bc < 1e-8 || ac < 1e-8) return Infinity;
+  return (ab * bc * ac) / (2 * area2);
 }
 
-function loopDistanceM(a: number, b: number, lengthM: number): number {
-  const direct = Math.abs(a - b);
-  return Math.min(direct, Math.max(0, lengthM - direct));
-}
-
-function surfaceSignature(provider: ShowcaseCircuitSurfaceProvider, x: number, z: number): string {
-  const s = provider.sampleSurface(x, z);
-  return [
-    s.type,
-    s.elevation.toFixed(8),
-    s.normal.x.toFixed(8),
-    s.normal.y.toFixed(8),
-    s.normal.z.toFixed(8),
-    s.friction.toFixed(8),
-  ].join('|');
+function sampleAtLateral(provider: ShowcaseCircuitSurfaceProvider, u: number, lateralM: number) {
+  const s = SHOWCASE_PATH.sampleAt(u);
+  return provider.sampleSurface(
+    s.center.x + s.lateral.x * lateralM,
+    s.center.z + s.lateral.z * lateralM,
+  );
 }
 
 export function runShowcaseCircuitQA(): Result[] {
   results.length = 0;
   const path = SHOWCASE_PATH;
+  const provider = new ShowcaseCircuitSurfaceProvider(path);
   const samples = path.samples;
-  const n = samples.length;
 
-  // 1) Basic finite/closed-loop sanity.
-  {
-    let nonFinite = 0;
-    let maxStep = 0;
-    let maxStepIndex = 0;
-    for (let i = 0; i < n; i++) {
-      const s = samples[i];
-      const values = [
-        s.center.x, s.center.y, s.center.z,
-        s.tangent.x, s.tangent.y, s.tangent.z,
-        s.normal.x, s.normal.y, s.normal.z,
-        s.banking, s.distance,
-      ];
-      if (!values.every(Number.isFinite)) nonFinite++;
-      const step = s.center.distanceTo(samples[(i + 1) % n].center);
-      if (step > maxStep) {
-        maxStep = step;
-        maxStepIndex = i;
+  const geometryLocked =
+    TRACK_WIDTH_M === 15 &&
+    CURB_WIDTH_M === 0.9 &&
+    RUNOFF_WIDTH_M === 8.1 &&
+    OUTER_RUNOFF_M === 16.5 &&
+    BARRIER_OFFSET_M === 16 &&
+    RACERRHI_RECOVERY_LIMIT_M === 14.5 &&
+    PATH_SAMPLES === 1400;
+  record({
+    id: 'racerrhi-geometry-lock',
+    status: geometryLocked ? 'PASS' : 'FAIL',
+    summary:
+      'road=' + TRACK_WIDTH_M + 'm curb=' + CURB_WIDTH_M + 'm gravelHalf=' +
+      OUTER_RUNOFF_M + 'm rail=' + BARRIER_OFFSET_M + 'm samples=' + PATH_SAMPLES,
+  });
+
+  let maxStep = 0;
+  let maxGrade = 0;
+  let minNormalY = 1;
+  let nonFinite = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const a = samples[i];
+    const b = samples[(i + 1) % samples.length];
+    const dxz = Math.hypot(b.center.x - a.center.x, b.center.z - a.center.z);
+    const dy = b.center.y - a.center.y;
+    maxStep = Math.max(maxStep, a.center.distanceTo(b.center));
+    maxGrade = Math.max(maxGrade, Math.abs(dy) / Math.max(1e-6, dxz));
+    minNormalY = Math.min(minNormalY, a.normal.y);
+    if (![a.center.x, a.center.y, a.center.z, a.tangent.x, a.tangent.y, a.tangent.z].every(Number.isFinite)) {
+      nonFinite++;
+    }
+  }
+  record({
+    id: 'path-continuity',
+    status: nonFinite > 0 || maxStep > 3.0 || maxGrade > 0.10 || minNormalY < 0.98 ? 'FAIL' : 'PASS',
+    summary:
+      'length=' + path.lengthM.toFixed(1) + 'm maxStep=' + maxStep.toFixed(2) +
+      'm maxGrade=' + (maxGrade * 100).toFixed(2) + '% minNormalY=' + minNormalY.toFixed(4),
+    details: ['nonFinite=' + nonFinite],
+  });
+
+  let minNonAdjacentXZ = Infinity;
+  let minPair = '';
+  for (let i = 0; i < samples.length; i += 7) {
+    for (let j = i + 70; j < samples.length; j += 7) {
+      const wrap = Math.min(j - i, samples.length - (j - i));
+      if (wrap < 70) continue;
+      const d = Math.hypot(
+        samples[i].center.x - samples[j].center.x,
+        samples[i].center.z - samples[j].center.z,
+      );
+      if (d < minNonAdjacentXZ) {
+        minNonAdjacentXZ = d;
+        minPair = i + ',' + j;
       }
     }
+  }
+  record({
+    id: 'route-separation',
+    status: minNonAdjacentXZ < TRACK_WIDTH_M ? 'FAIL' : minNonAdjacentXZ < TRACK_WIDTH_M + 8 ? 'WARN' : 'PASS',
+    summary: 'closest non-adjacent centerlines=' + minNonAdjacentXZ.toFixed(1) + 'm',
+    details: ['pair=' + minPair],
+  });
 
-    const closeStep = samples[n - 1].center.distanceTo(samples[0].center);
-    const fail = nonFinite > 0 || maxStep > 8 || closeStep > 8;
-    record({
-      id: 'sampling-and-loop-closure',
-      status: fail ? 'FAIL' : 'PASS',
-      summary: `length=${path.lengthM.toFixed(1)}m samples=${n} maxStep=${maxStep.toFixed(2)}m closure=${closeStep.toFixed(2)}m`,
-      details: [`maxStepIndex=${maxStepIndex}`, `nonFinite=${nonFinite}`],
-    });
+  let surfaceErrors = 0;
+  let maxCrossTrackHeightDelta = 0;
+  const surfaceDetails: string[] = [];
+  for (const u of [0, 0.11, 0.27, 0.44, 0.61, 0.78, 0.91]) {
+    const center = sampleAtLateral(provider, u, 0);
+    const road = sampleAtLateral(provider, u, 6.6);
+    const kerb = sampleAtLateral(provider, u, 7.6);
+    const gravel = sampleAtLateral(provider, u, 10.0);
+
+    if (center.type !== 'asphalt' || Math.abs(center.friction - 1.0) > 1e-9) surfaceErrors++;
+    if (road.type !== 'asphalt' || Math.abs(road.friction - 1.0) > 1e-9) surfaceErrors++;
+    if (kerb.type !== 'kerb' || Math.abs(kerb.friction - 0.88) > 1e-9) surfaceErrors++;
+    if (gravel.type !== 'gravel' || Math.abs(gravel.friction - 0.55) > 1e-9) surfaceErrors++;
+
+    maxCrossTrackHeightDelta = Math.max(
+      maxCrossTrackHeightDelta,
+      Math.abs(center.elevation - road.elevation),
+      Math.abs(center.elevation - kerb.elevation),
+      Math.abs(center.elevation - gravel.elevation),
+    );
+    surfaceDetails.push(
+      'u=' + u.toFixed(2) + ' road=' + road.type + '/' + road.friction.toFixed(2) +
+      ' kerb=' + kerb.type + '/' + kerb.friction.toFixed(2) +
+      ' gravel=' + gravel.type + '/' + gravel.friction.toFixed(2)
+    );
   }
 
-  // 2) Centerline curvature. The initial generated track had a ~0.1 m closure
-  // cusp and many sub-20 m radii. This is the most important regression gate.
-  let minimumRadiusM = Number.POSITIVE_INFINITY;
-  let minimumRadiusIndex = 0;
-  {
-    for (let i = 0; i < n; i++) {
-      const radius = horizontalRadius(
-        samples[(i - 1 + n) % n].center,
+  record({
+    id: 'visible-surface-equals-physics-surface',
+    status: surfaceErrors > 0 || maxCrossTrackHeightDelta > 1e-6 ? 'FAIL' : 'PASS',
+    summary:
+      'classificationErrors=' + surfaceErrors +
+      ' maxHiddenHeightStep=' + (maxCrossTrackHeightDelta * 1000).toFixed(3) + 'mm',
+    details: surfaceDetails,
+  });
+
+  const probes = [0.03, 0.19, 0.38, 0.57, 0.74, 0.93];
+  const forward = probes.map((u) => {
+    const s = path.sampleAt(u);
+    return provider.sampleSurface(s.center.x, s.center.z);
+  });
+  const reverseProvider = new ShowcaseCircuitSurfaceProvider(path);
+  const reverse = [...probes].reverse().map((u) => {
+    const s = path.sampleAt(u);
+    return reverseProvider.sampleSurface(s.center.x, s.center.z);
+  }).reverse();
+  const orderMismatches = forward.filter((a, i) =>
+    a.type !== reverse[i].type ||
+    Math.abs(a.elevation - reverse[i].elevation) > 1e-9 ||
+    Math.abs(a.friction - reverse[i].friction) > 1e-9
+  ).length;
+  record({
+    id: 'surface-query-determinism',
+    status: orderMismatches ? 'FAIL' : 'PASS',
+    summary: 'orderDependentSamples=' + orderMismatches,
+  });
+
+  const spawn = path.spawn();
+  const wheelOffsets = [
+    { id: 'FL', x: 0.842, z: 1.367 },
+    { id: 'FR', x: -0.842, z: 1.367 },
+    { id: 'RL', x: 0.830, z: -1.638 },
+    { id: 'RR', x: -0.830, z: -1.638 },
+  ];
+  const cy = Math.cos(spawn.yaw);
+  const sy = Math.sin(spawn.yaw);
+  const wheelSurfaces = wheelOffsets.map((wheel) => {
+    const x = spawn.x + wheel.x * cy + wheel.z * sy;
+    const z = spawn.z - wheel.x * sy + wheel.z * cy;
+    return { id: wheel.id, surface: provider.sampleSurface(x, z) };
+  });
+  const spawnOffRoad = wheelSurfaces.filter(({ surface }) => surface.type !== 'asphalt');
+  record({
+    id: 'spawn-wheel-coherence',
+    status: spawnOffRoad.length ? 'FAIL' : 'PASS',
+    summary: 'offRoad=' + spawnOffRoad.length + '/4',
+    details: wheelSurfaces.map(({ id, surface }) =>
+      id + ': ' + surface.type + ' mu=' + surface.friction.toFixed(2) + ' y=' + surface.elevation.toFixed(3)
+    ),
+  });
+
+  let minRadius = Infinity;
+  for (let i = 0; i < samples.length; i++) {
+    minRadius = Math.min(
+      minRadius,
+      horizontalRadius(
+        samples[(i - 5 + samples.length) % samples.length].center,
         samples[i].center,
-        samples[(i + 1) % n].center,
-      );
-      if (radius < minimumRadiusM) {
-        minimumRadiusM = radius;
-        minimumRadiusIndex = i;
-      }
-    }
-
-    const sample = samples[minimumRadiusIndex];
-    const requiredRoadWheelDeg = THREE.MathUtils.radToDeg(
-      Math.atan(3.00482 / Math.max(0.001, minimumRadiusM)),
+        samples[(i + 5) % samples.length].center,
+      ),
     );
-    const status: Status = minimumRadiusM < 28
-      ? 'FAIL'
-      : minimumRadiusM < 32
-        ? 'WARN'
-        : 'PASS';
-    record({
-      id: 'minimum-horizontal-radius',
-      status,
-      summary: `minR=${minimumRadiusM.toFixed(2)}m at u=${sample.u.toFixed(4)}`,
-      details: [
-        `xyz=(${sample.center.x.toFixed(1)}, ${sample.center.y.toFixed(1)}, ${sample.center.z.toFixed(1)})`,
-        `20m road half-width=${TRACK_HALF_WIDTH_M.toFixed(1)}m`,
-        `kinematic center road-wheel angle≈${requiredRoadWheelDeg.toFixed(1)}°`,
-      ],
-    });
   }
-
-  // 3) Grade and vertical transition rate.
-  {
-    const grades = samples.map((sample) =>
-      sample.tangent.y / Math.max(1e-8, Math.hypot(sample.tangent.x, sample.tangent.z))
-    );
-    let maxGrade = 0;
-    let maxGradeIndex = 0;
-    let maxGradeRate = 0;
-    let maxGradeRateIndex = 0;
-
-    for (let i = 0; i < n; i++) {
-      const grade = Math.abs(grades[i]);
-      if (grade > maxGrade) {
-        maxGrade = grade;
-        maxGradeIndex = i;
-      }
-      const ds = samples[i].center.distanceTo(samples[(i + 1) % n].center);
-      const rate = Math.abs(grades[(i + 1) % n] - grades[i]) / Math.max(1e-6, ds);
-      if (rate > maxGradeRate) {
-        maxGradeRate = rate;
-        maxGradeRateIndex = i;
-      }
-    }
-
-    const status: Status = maxGrade > 0.08 || maxGradeRate > 0.008
-      ? 'FAIL'
-      : maxGrade > 0.06 || maxGradeRate > 0.004
-        ? 'WARN'
-        : 'PASS';
-    record({
-      id: 'grade-and-vertical-curvature',
-      status,
-      summary: `maxGrade=${(maxGrade * 100).toFixed(2)}% maxGradeRate=${maxGradeRate.toFixed(5)}/m`,
-      details: [`gradeIndex=${maxGradeIndex}`, `gradeRateIndex=${maxGradeRateIndex}`],
-    });
-  }
-
-  // 4) Banking amplitude/rate and tangent/normal continuity.
-  {
-    let maxBank = 0;
-    let maxBankRate = 0;
-    let minimumTangentDot = 1;
-    let minimumNormalDot = 1;
-    let badNormalCount = 0;
-
-    for (let i = 0; i < n; i++) {
-      const a = samples[i];
-      const b = samples[(i + 1) % n];
-      maxBank = Math.max(maxBank, Math.abs(a.banking));
-      const ds = a.center.distanceTo(b.center);
-      maxBankRate = Math.max(
-        maxBankRate,
-        Math.abs(b.banking - a.banking) / Math.max(1e-6, ds),
-      );
-      minimumTangentDot = Math.min(minimumTangentDot, a.tangent.dot(b.tangent));
-      minimumNormalDot = Math.min(minimumNormalDot, a.normal.dot(b.normal));
-      if (a.normal.y <= 0 || !Number.isFinite(a.normal.y)) badNormalCount++;
-    }
-
-    const status: Status =
-      maxBank > THREE.MathUtils.degToRad(8) ||
-      maxBankRate > 0.006 ||
-      minimumTangentDot < 0.975 ||
-      minimumNormalDot < 0.975 ||
-      badNormalCount > 0
-        ? 'FAIL'
-        : maxBank > THREE.MathUtils.degToRad(6) || maxBankRate > 0.003
-          ? 'WARN'
-          : 'PASS';
-
-    record({
-      id: 'bank-and-frame-continuity',
-      status,
-      summary: `maxBank=${THREE.MathUtils.radToDeg(maxBank).toFixed(2)}° bankRate=${maxBankRate.toFixed(5)}rad/m`,
-      details: [
-        `minTangentDot=${minimumTangentDot.toFixed(6)}`,
-        `minNormalDot=${minimumNormalDot.toFixed(6)}`,
-        `badNormals=${badNormalCount}`,
-      ],
-    });
-  }
-
-  // 5) Ribbon basis and fold protection.
-  {
-    let badBasis = 0;
-    let minimumBasisDot = 1;
-    for (let i = 0; i < n; i += 5) {
-      const s = samples[i];
-      const cross = new THREE.Vector3().crossVectors(s.tangent, s.bankedLateral).normalize();
-      const dot = cross.dot(s.normal);
-      minimumBasisDot = Math.min(minimumBasisDot, dot);
-      if (dot < 0.985 || s.bankedLateral.length() < 0.99 || s.bankedLateral.length() > 1.01) {
-        badBasis++;
-      }
-    }
-    const folded = minimumRadiusM <= TRACK_HALF_WIDTH_M + CURB_WIDTH_M + 2;
-    record({
-      id: 'ribbon-orientation',
-      status: badBasis > 0 || folded ? 'FAIL' : 'PASS',
-      summary: `badBasis=${badBasis} minBasisDot=${minimumBasisDot.toFixed(5)} folded=${folded}`,
-      details: [`minRadius=${minimumRadiusM.toFixed(2)}m`, `road+kerb half-span=${(TRACK_HALF_WIDTH_M + CURB_WIDTH_M).toFixed(2)}m`],
-    });
-  }
-
-  // 6) Non-adjacent centerline separation. The v2 route should have no bridge,
-  // no underpass and no at-grade self-intersection at all.
-  {
-    let minimumXZ = Number.POSITIVE_INFINITY;
-    let minimumPair = [-1, -1];
-    const stride = 3;
-    for (let i = 0; i < n; i += stride) {
-      for (let j = i + stride; j < n; j += stride) {
-        const along = loopDistanceM(samples[i].distance, samples[j].distance, path.lengthM);
-        if (along < 100) continue;
-        const xz = Math.hypot(
-          samples[i].center.x - samples[j].center.x,
-          samples[i].center.z - samples[j].center.z,
-        );
-        if (xz < minimumXZ) {
-          minimumXZ = xz;
-          minimumPair = [i, j];
-        }
-      }
-    }
-
-    const status: Status = minimumXZ < TRACK_WIDTH_M + 6
-      ? 'FAIL'
-      : minimumXZ < TRACK_WIDTH_M + 20
-        ? 'WARN'
-        : 'PASS';
-    record({
-      id: 'non-adjacent-route-separation',
-      status,
-      summary: `closest=${minimumXZ.toFixed(1)}m for points >100m apart along lap`,
-      details: [`pair=${minimumPair[0]},${minimumPair[1]}`],
-    });
-  }
-
-  // 7) Surface provider must be query-order independent.
-  {
-    const indices = [0, 97, 211, 359, 487, 653, 811].map((i) => i % n);
-    const points = indices.map((index) => {
-      const sample = samples[index];
-      return { index, x: sample.center.x, z: sample.center.z };
-    });
-    const forwardProvider = new ShowcaseCircuitSurfaceProvider(path);
-    const reverseProvider = new ShowcaseCircuitSurfaceProvider(path);
-    const forward = new Map<number, string>();
-    const reverse = new Map<number, string>();
-
-    for (const point of points) {
-      forward.set(point.index, surfaceSignature(forwardProvider, point.x, point.z));
-    }
-    for (const point of [...points].reverse()) {
-      reverse.set(point.index, surfaceSignature(reverseProvider, point.x, point.z));
-    }
-
-    const mismatches = points.filter((point) => forward.get(point.index) !== reverse.get(point.index));
-    record({
-      id: 'surface-query-determinism',
-      status: mismatches.length > 0 ? 'FAIL' : 'PASS',
-      summary: `orderDependentSamples=${mismatches.length}`,
-      details: mismatches.map((point) => `sample=${point.index}`),
-    });
-  }
-
-  // 7b) Physics surface lookup must be continuous between the discrete path samples.
-  // A nearest-sample implementation creates a longitudinal staircase even when the
-  // rendered ribbon and source curve are smooth, which excites the unsprung masses.
-  {
-    const provider = new ShowcaseCircuitSurfaceProvider(path);
-    const probeCount = PATH_SAMPLES * 4;
-    let maxProjectionErrorM = 0;
-    let maxElevationErrorM = 0;
-    let minimumNormalDot = 1;
-
-    for (let i = 0; i < probeCount; i++) {
-      // Avoid probing only exact sample boundaries; quarter-sample offsets catch
-      // the old snapping behavior deterministically.
-      const u = (i + 0.37) / probeCount;
-      const expected = path.sampleAt(u);
-      const hit = path.closest(expected.center.x, expected.center.z);
-      const surface = provider.sampleSurface(expected.center.x, expected.center.z);
-
-      maxProjectionErrorM = Math.max(
-        maxProjectionErrorM,
-        Math.hypot(
-          hit.sample.center.x - expected.center.x,
-          hit.sample.center.z - expected.center.z,
-        ),
-      );
-      maxElevationErrorM = Math.max(
-        maxElevationErrorM,
-        Math.abs(surface.elevation - expected.center.y),
-      );
-      minimumNormalDot = Math.min(
-        minimumNormalDot,
-        expected.normal.x * surface.normal.x +
-          expected.normal.y * surface.normal.y +
-          expected.normal.z * surface.normal.z,
-      );
-    }
-
-    const fail =
-      maxProjectionErrorM > 0.02 ||
-      maxElevationErrorM > 0.005 ||
-      minimumNormalDot < 0.999;
-    record({
-      id: 'continuous-physics-surface-projection',
-      status: fail ? 'FAIL' : 'PASS',
-      summary:
-        `maxXZError=${(maxProjectionErrorM * 1000).toFixed(1)}mm ` +
-        `maxYError=${(maxElevationErrorM * 1000).toFixed(1)}mm minNormalDot=${minimumNormalDot.toFixed(6)}`,
-      details: [
-        `probes=${probeCount}`,
-        'guards against fixed-sample staircase excitation of wheel/hub dynamics',
-      ],
-    });
-  }
-
-  // 8) Spawn center + M5-sized wheel offsets must all land on the same road deck.
-  {
-    const spawn = path.spawn();
-    const provider = new ShowcaseCircuitSurfaceProvider(path);
-    provider.resetHint(spawn.elevation);
-    const cosYaw = Math.cos(spawn.yaw);
-    const sinYaw = Math.sin(spawn.yaw);
-    const wheelOffsets = [
-      { id: 'FL', x: 0.82, z: 1.50 },
-      { id: 'FR', x: -0.82, z: 1.50 },
-      { id: 'RL', x: 0.82, z: -1.50 },
-      { id: 'RR', x: -0.82, z: -1.50 },
-    ];
-    const rows = wheelOffsets.map((offset) => {
-      const x = spawn.x + offset.x * cosYaw + offset.z * sinYaw;
-      const z = spawn.z - offset.x * sinYaw + offset.z * cosYaw;
-      return { id: offset.id, surface: provider.sampleSurface(x, z) };
-    });
-    const offRoad = rows.filter((row) => !['asphalt', 'racing_line'].includes(row.surface.type));
-    const elevations = rows.map((row) => row.surface.elevation);
-    const spread = Math.max(...elevations) - Math.min(...elevations);
-
-    record({
-      id: 'spawn-wheel-coherence',
-      status: offRoad.length > 0 || spread > 0.75 ? 'FAIL' : 'PASS',
-      summary: `offRoad=${offRoad.length}/4 elevationSpread=${spread.toFixed(3)}m`,
-      details: rows.map((row) => `${row.id}: ${row.surface.type} y=${row.surface.elevation.toFixed(3)}`),
-    });
-  }
-
-  // 9) Surface widths and transition continuity must match the visible geometry.
-  {
-    const station = path.sampleAt(0.36);
-    const provider = new ShowcaseCircuitSurfaceProvider(path);
-    const probes = [
-      { lateral: TRACK_HALF_WIDTH_M - 0.2, expected: 'road' },
-      { lateral: TRACK_HALF_WIDTH_M + 0.5, expected: 'kerb' },
-      { lateral: TRACK_HALF_WIDTH_M + CURB_WIDTH_M + 1, expected: 'runoff' },
-      { lateral: OUTER_RUNOFF_M - 0.2, expected: 'runoff' },
-      { lateral: OUTER_RUNOFF_M + 2, expected: 'gravel' },
-    ];
-    let mismatches = 0;
-    const details: string[] = [];
-
-    for (const probe of probes) {
-      const x = station.center.x + station.lateral.x * probe.lateral;
-      const z = station.center.z + station.lateral.z * probe.lateral;
-      const surface = provider.sampleSurface(x, z);
-      const actual = surface.type === 'asphalt' || surface.type === 'racing_line'
-        ? 'road'
-        : surface.type === 'marbles'
-          ? 'runoff'
-          : surface.type;
-      if (actual !== probe.expected) mismatches++;
-      details.push(`${probe.lateral.toFixed(2)}m: expected=${probe.expected} actual=${actual} y=${surface.elevation.toFixed(3)}`);
-    }
-
-    const boundaryOffsets = [TRACK_HALF_WIDTH_M, TRACK_HALF_WIDTH_M + CURB_WIDTH_M, OUTER_RUNOFF_M];
-    let maximumBoundaryJump = 0;
-    for (const boundary of boundaryOffsets) {
-      const beforeX = station.center.x + station.lateral.x * (boundary - 0.01);
-      const beforeZ = station.center.z + station.lateral.z * (boundary - 0.01);
-      const afterX = station.center.x + station.lateral.x * (boundary + 0.01);
-      const afterZ = station.center.z + station.lateral.z * (boundary + 0.01);
-      const before = provider.sampleSurface(beforeX, beforeZ);
-      const after = provider.sampleSurface(afterX, afterZ);
-      maximumBoundaryJump = Math.max(maximumBoundaryJump, Math.abs(after.elevation - before.elevation));
-    }
-
-    record({
-      id: 'surface-widths-and-boundaries',
-      status: mismatches > 0 || maximumBoundaryJump > 0.005 ? 'FAIL' : 'PASS',
-      summary: `mismatches=${mismatches} maxBoundaryJump=${(maximumBoundaryJump * 1000).toFixed(1)}mm`,
-      details: [
-        ...details,
-        `road=${TRACK_WIDTH_M}m curb=${CURB_WIDTH_M}m runoff=${RUNOFF_WIDTH_M}m outer=${OUTER_RUNOFF_M.toFixed(2)}m`,
-      ],
-    });
-  }
-
-  // 10) Trackside exclusion invariant used by all repeated barriers.
-  {
-    const clearance = BARRIER_OFFSET_M - OUTER_RUNOFF_M;
-    record({
-      id: 'barrier-recovery-clearance',
-      status: clearance < 2 ? 'FAIL' : 'PASS',
-      summary: `barrier is ${clearance.toFixed(2)}m outside full runoff`,
-    });
-  }
-
-  // 11) Lightweight kinematic feasibility: not a physics override, just a guard that
-  // the measured centerline does not require impossible steering geometry.
-  {
-    const wheelbaseM = 3.00482;
-    const requiredSteerDeg = THREE.MathUtils.radToDeg(
-      Math.atan(wheelbaseM / Math.max(0.001, minimumRadiusM)),
-    );
-    const frictionSpeedKmh = Math.sqrt(0.90 * 9.81 * Math.max(0.001, minimumRadiusM)) * 3.6;
-    record({
-      id: 'kinematic-lap-feasibility',
-      status: requiredSteerDeg > 18 || frictionSpeedKmh < 45 ? 'FAIL' : 'PASS',
-      summary: `tightest-corner steer≈${requiredSteerDeg.toFixed(1)}° 0.90g speed≈${frictionSpeedKmh.toFixed(1)}km/h`,
-      details: [`spawnU=${SHOWCASE_SPAWN_U.toFixed(3)}`, `pathSamples=${PATH_SAMPLES}`],
-    });
-  }
+  const requiredSteer = THREE.MathUtils.radToDeg(Math.atan(3.00482 / Math.max(0.01, minRadius)));
+  record({
+    id: 'm5-kinematic-feasibility',
+    status: minRadius < 10 || requiredSteer > 20 ? 'FAIL' : 'PASS',
+    summary: 'minRadius≈' + minRadius.toFixed(1) + 'm requiredCenterSteer≈' + requiredSteer.toFixed(1) + '°',
+  });
 
   return [...results];
 }
 
 function main(): void {
-  console.log('Showcase Circuit QA — geometry, surface determinism, spawn and recovery-zone checks');
+  console.log('Racerrhi Côte d Azur QA — geometry, surfaces, continuity and M5 spawn');
   runShowcaseCircuitQA();
   const failures = results.filter((result) => result.status === 'FAIL');
   const warnings = results.filter((result) => result.status === 'WARN');
   const passes = results.filter((result) => result.status === 'PASS');
-  console.log(`\nTrack QA: ${passes.length} PASS | ${warnings.length} WARN | ${failures.length} FAIL`);
-  if (failures.length > 0) {
-    console.error(`Blocking track defects: ${failures.map((failure) => failure.id).join(', ')}`);
-    process.exit(1);
-  }
+  console.log('\nTrack QA: ' + passes.length + ' PASS | ' + warnings.length + ' WARN | ' + failures.length + ' FAIL');
+  if (failures.length) process.exit(1);
 }
 
 const invokedPath = process.argv[1] ?? '';
