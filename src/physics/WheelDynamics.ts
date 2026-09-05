@@ -56,6 +56,19 @@ const makeZeroTireOutput = (): TireForceOutput => ({
   effectiveMu: 0,
 });
 
+const combinedEnvelopeUsage = (
+  fx: number,
+  fy: number,
+  longitudinalLimit: number,
+  lateralLimit: number,
+  exponent: number
+): number => {
+  if (longitudinalLimit <= 1 || lateralLimit <= 1) return 0;
+  const nx = Math.abs(fx) / longitudinalLimit;
+  const ny = Math.abs(fy) / lateralLimit;
+  return Math.pow(Math.pow(nx, exponent) + Math.pow(ny, exponent), 1 / exponent);
+};
+
 /**
  * One wheel rotational DOF + tire transient states.
  *
@@ -178,10 +191,6 @@ export class WheelDynamics {
     const roadOmega = longitudinalVelocity / this.radius;
     const isFreeRolling = Math.abs(driveTorque) < 8 && brakeRequest < 8 && fz > 20;
 
-    // The former implementation snapped into a different longitudinal solver at
-    // 2.6 m/s (9.36 km/h). At full lock, the inside/outside front wheels repeatedly
-    // crossed that threshold and alternated between zero and dynamic longitudinal
-    // tire force. Replace the cliff with a smooth crawl-speed rolling constraint.
     const freeRollFullConstraintMs = 1.40;
     const freeRollDynamicMs = 3.40;
     const freeRollLinear = PhysicsMath.clamp(
@@ -196,9 +205,6 @@ export class WheelDynamics {
     const freeRollDynamicAuthority = 1 - freeRollConstraintAuthority;
 
     if (isFreeRolling) {
-      // Preserve the established dynamic free-wheel response outside the crawl
-      // handoff. Only add stronger road-speed tracking as constraint authority
-      // actually rises, so 25 m/s braking and other high-speed tests are untouched.
       const baselineTrackingRate = Math.abs(longitudinalVelocity) < 5 ? 120 : 45;
       const trackingRate = PhysicsMath.lerp(
         baselineTrackingRate,
@@ -214,12 +220,6 @@ export class WheelDynamics {
     const dynamicBlendLinear = PhysicsMath.clamp((rollingSpeed - 0.35) / (3.00 - 0.35), 0, 1);
     const dynamicBlend = dynamicBlendLinear * dynamicBlendLinear * (3 - 2 * dynamicBlendLinear);
 
-    // Relaxation length is a useful distance-domain representation once the tire is
-    // rolling normally, but at parking speed a long high-speed calibration turns into
-    // an unrealistically large time delay (L / v). The M5's 0.50 m high-speed value
-    // becomes ~0.18 s at 10 km/h and forms a low-frequency scrub/load feedback loop.
-    // Blend to a short brush-like relaxation length only at low contact-patch speed;
-    // by normal road speeds the configured calibration is recovered exactly.
     const contactRoadSpeed = Math.hypot(longitudinalVelocity, lateralVelocity);
     const configuredLateralSigma = Math.max(0.035, this.tireConfig.relaxationLength);
     const parkingLateralSigma = Math.min(configuredLateralSigma, 0.15);
@@ -345,7 +345,24 @@ export class WheelDynamics {
     const blendedTargetFx = PhysicsMath.lerp(staticFx, target.fx, dynamicBlend);
     const blendedTargetFy = PhysicsMath.lerp(staticFy, target.fy, dynamicBlend);
     const blendedTargetMz = target.aligningTorque * dynamicBlend;
-    const blendedFrictionLimit = PhysicsMath.lerp(lowSpeedFrictionLimit, target.frictionLimit, dynamicBlend);
+    const targetLongitudinalLimit = target.longitudinalForceLimit ?? target.frictionLimit;
+    const targetLateralLimit = target.lateralForceLimit ?? target.frictionLimit;
+    const blendedLongitudinalLimit = PhysicsMath.lerp(
+      lowSpeedFrictionLimit,
+      targetLongitudinalLimit,
+      dynamicBlend
+    );
+    const blendedLateralLimit = PhysicsMath.lerp(
+      lowSpeedFrictionLimit,
+      targetLateralLimit,
+      dynamicBlend
+    );
+    const blendedCombinedSlipExponent = PhysicsMath.lerp(
+      2.0,
+      target.combinedSlipExponent ?? 2.0,
+      dynamicBlend
+    );
+    const blendedFrictionLimit = Math.max(blendedLongitudinalLimit, blendedLateralLimit);
 
     const lateralForceSigma = Math.max(0.025, effectiveLateralSigma * 0.55);
     const longitudinalForceSigma = Math.max(
@@ -374,13 +391,20 @@ export class WheelDynamics {
     let fy = this.transientFy;
 
     const limit = Math.max(0, blendedFrictionLimit);
-    const resultant = Math.hypot(fx, fy);
-    if (limit > 0 && resultant > limit) {
-      const scale = limit / resultant;
+    let transientEnvelopeUsage = combinedEnvelopeUsage(
+      fx,
+      fy,
+      blendedLongitudinalLimit,
+      blendedLateralLimit,
+      blendedCombinedSlipExponent
+    );
+    if (transientEnvelopeUsage > 1) {
+      const scale = 1 / transientEnvelopeUsage;
       fx *= scale;
       fy *= scale;
       this.transientFx *= scale;
       this.transientFy *= scale;
+      transientEnvelopeUsage = 1;
     }
 
     const contactFxForWheelTorque = fx - rrForce;
@@ -410,8 +434,6 @@ export class WheelDynamics {
       const afterError = this.angularVelocity - roadOmega;
 
       if (Math.abs(driveTorque) < 20 && brakeRequest < 20 && beforeError * afterError < 0) {
-        // Preserve the original free-wheel overshoot guard at every speed. The bug
-        // was the speed-dependent force-state reset, not this zero-crossing clamp.
         this.angularVelocity = roadOmega;
       }
 
@@ -463,8 +485,7 @@ export class WheelDynamics {
     this.brakeRotorTemp += (brakePower * 0.00022 - (this.brakeRotorTemp - 25) * 0.08) * dt;
     this.brakeRotorTemp = PhysicsMath.clamp(this.brakeRotorTemp, 20, 900);
 
-    const transientResultant = Math.hypot(fx, fy);
-    const gripUtilization = limit > 0 ? PhysicsMath.clamp(transientResultant / limit, 0, 1.5) : 0;
+    const gripUtilization = limit > 0 ? PhysicsMath.clamp(transientEnvelopeUsage, 0, 1.5) : 0;
     const grossSlide = estimateGrossTireSlide(
       longitudinalVelocity,
       lateralVelocity,
