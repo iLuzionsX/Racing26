@@ -464,7 +464,9 @@ export class Vehicle {
       euler.pitch,
       minRideHeight,
       inputs.brake,
-      this.config.wheelbase
+      this.config.wheelbase,
+      this.chassisMassProperties.cgToFrontAxle,
+      this.chassisMassProperties.cgToRearAxle
     );
 
     // Apply aero forces to rigid body

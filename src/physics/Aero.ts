@@ -47,7 +47,9 @@ export class AerodynamicsSystem {
     pitchRad: number,
     underbodyGroundClearance: number,
     brakeInput: number,
-    wheelbase: number
+    wheelbase: number,
+    cgToFrontAxleM?: number,
+    cgToRearAxleM?: number
   ): {
     frontAeroForce: Vec3;
     rearAeroForce: Vec3;
@@ -121,12 +123,18 @@ export class AerodynamicsSystem {
 
     this.totalDownforceN = dfFront + dfRear + diffuserDownforce;
 
-    // Application points in body coords:
-    // Front axle at z = +wheelbase * 0.5
-    // Rear axle at z = -wheelbase * 0.5
-    // Diffuser center at z = -wheelbase * 0.2
-    const frontPointBody = PhysicsMath.vec3(0, 0.2, wheelbase * 0.5);
-    const rearPointBody = PhysicsMath.vec3(0, 0.7, -wheelbase * 0.5);
+    // Application points in body coords: true CG-to-axle distances when supplied,
+    // otherwise symmetric wheelbase/2 fallback preserves legacy call sites.
+    // Front axle at z = +cgToFrontAxleM, rear axle at z = -cgToRearAxleM.
+    // Diffuser center at z = -wheelbase * 0.2 (unchanged).
+    const frontAxleZ = Number.isFinite(cgToFrontAxleM as number) && (cgToFrontAxleM as number) > 0
+      ? (cgToFrontAxleM as number)
+      : wheelbase * 0.5;
+    const rearAxleZ = Number.isFinite(cgToRearAxleM as number) && (cgToRearAxleM as number) > 0
+      ? (cgToRearAxleM as number)
+      : wheelbase * 0.5;
+    const frontPointBody = PhysicsMath.vec3(0, 0.2, frontAxleZ);
+    const rearPointBody = PhysicsMath.vec3(0, 0.7, -rearAxleZ);
     const diffuserPointBody = PhysicsMath.vec3(0, 0.05, -wheelbase * 0.2);
 
     const frontAeroForce = PhysicsMath.vec3(0, -dfFront, 0);
