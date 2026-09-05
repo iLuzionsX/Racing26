@@ -5,6 +5,7 @@ import { projectTireShearOntoSurface, wheelContactAuthorityForUprightness } from
 import { PhysicsMath } from '../math/PhysicsMath';
 import { DEFAULT_VEHICLE_CONFIG } from '../vehiclePresets';
 import { BMW_M5_2025_OVERRIDES } from '../m5G90';
+import { ProvingGroundSurfaceProvider } from '../SurfaceProvider';
 
 const DT = 1 / 120;
 
@@ -138,6 +139,32 @@ function testWheelAuthorityHandsOffBeforeSidewaysJacking() {
   assert(a60 < 1e-6, `60deg retained jacking authority: ${a60}`);
 }
 
+function testProvingGroundCrashDisplacementDoesNotEnterHiddenGravel() {
+  const surface = new ProvingGroundSurfaceProvider();
+  const center = surface.sampleSurface(0, 0);
+  const displacedApron = surface.sampleSurface(40, 0);
+  const wetSkidpad = surface.sampleSurface(85, -60);
+
+  assert(center.type === 'racing_line', `center runway type changed to ${center.type}`);
+  assert(near(center.friction, 1.10), `center runway friction changed to ${center.friction}`);
+
+  // This is the key crash-recovery guardrail: the visible plane at x=40 m is
+  // ordinary asphalt. A lateral impact must not silently put all four tires on
+  // invisible 0.55-mu gravel while the player still sees the same asphalt mesh.
+  assert(
+    displacedApron.type === 'asphalt',
+    `visually asphalt apron became hidden ${displacedApron.type}`
+  );
+  assert(
+    near(displacedApron.friction, 1.0),
+    `visually asphalt apron friction changed to ${displacedApron.friction}`
+  );
+
+  // Preserve the intentionally visible low-grip test surface.
+  assert(wetSkidpad.type === 'wet', `wet skidpad type changed to ${wetSkidpad.type}`);
+  assert(near(wetSkidpad.friction, 0.42), `wet skidpad friction changed to ${wetSkidpad.friction}`);
+}
+
 function testRenderedWheelTracksPhysicalHubDuringWipeout() {
   const config = { ...DEFAULT_VEHICLE_CONFIG, ...BMW_M5_2025_OVERRIDES } as any;
   const renderer = new CarRenderer('#2563eb');
@@ -165,6 +192,7 @@ const tests: Array<[string, () => void]> = [
   ['chassis visual rotates around physical CG', testChassisVisualPivotsAtPhysicalCg],
   ['wheel authority hands off before sideways jacking', testWheelAuthorityHandsOffBeforeSidewaysJacking],
   ['rendered wheel tracks physical hub during wipeout', testRenderedWheelTracksPhysicalHubDuringWipeout],
+  ['proving-ground crash displacement does not enter hidden gravel', testProvingGroundCrashDisplacementDoesNotEnterHiddenGravel],
 ];
 
 for (const [name, test] of tests) {
