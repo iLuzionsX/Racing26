@@ -1,4 +1,4 @@
-name: Muse Spark delegated agent
+name: Muse Spark tyre config probe
 
 on:
   push:
@@ -9,138 +9,49 @@ on:
       - .github/workflows/muse-agent.yml
       - scripts/muse-agent/zen.mjs
       - scripts/muse-agent/run.mjs
-  workflow_dispatch:
-    inputs:
-      task:
-        description: Focused engineering objective for the BMW M5 driving lab
-        required: false
-        type: string
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
-  verify-config:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Announce gated Muse run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: gh api "repos/$REPO/issues/126/comments" -f body="MUSE_WORKFLOW_STARTED run=$RUN_ID head=${{ github.sha }}"
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Test Muse guardrails
+      - name: Guardrails
         run: node scripts/muse-agent/test.mjs
-      - name: Probe exact Muse runtime configuration
+      - name: Probe Muse
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-        run: |
-          node scripts/muse-agent/run.mjs --task "CONFIGURATION PROBE ONLY. Return JSON with summary='config probe', patch=null, no proposed files, no tests, and no repository recommendations."
-      - name: Require exact model and returned max effort
-        id: verify
+        run: node scripts/muse-agent/run.mjs --task "CONFIGURATION PROBE ONLY. Return JSON with summary config-probe, patch null, no proposed files, no tests, and no recommendations."
+      - name: Verify model and max reasoning
         run: |
           node <<'NODE'
           const fs = require('node:fs');
-          const file = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort().at(-1);
-          if (!file) throw new Error('Muse config probe produced no artifact.');
-          const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + file, 'utf8'));
-          console.log(JSON.stringify({model:a.model, requested_reasoning_effort:a.requested_reasoning_effort, response_reasoning_effort:a.response_reasoning_effort}, null, 2));
-          if (a.model !== 'muse-spark-1.3-contributor-free') throw new Error('Unexpected Muse model: ' + a.model);
-          if (a.requested_reasoning_effort !== 'max') throw new Error('Muse request did not pin max reasoning.');
-          if (a.response_reasoning_effort !== 'max') throw new Error('Provider did not confirm max reasoning; refusing fanout.');
+          const files = fs.readdirSync('.muse/artifacts').filter((x) => x.endsWith('.json')).sort();
+          if (!files.length) throw new Error('No Muse artifact');
+          const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + files[files.length - 1], 'utf8'));
+          console.log(JSON.stringify({
+            model: a.model,
+            requested_reasoning_effort: a.requested_reasoning_effort,
+            response_reasoning_effort: a.response_reasoning_effort,
+            status: a.status
+          }, null, 2));
+          if (a.model !== 'muse-spark-1.3-contributor-free') throw new Error('Unexpected model: ' + a.model);
+          if (a.requested_reasoning_effort !== 'max') throw new Error('Request did not use max');
+          if (a.response_reasoning_effort !== 'max') throw new Error('Provider did not confirm max: ' + a.response_reasoning_effort);
           NODE
-      - name: Post configuration evidence
+      - name: Upload probe
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          node <<'NODE' >/tmp/probe.txt
-          const fs = require('node:fs');
-          let evidence = {error:'no artifact'};
-          try {
-            const file = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort().at(-1);
-            if (file) {
-              const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + file, 'utf8'));
-              evidence = {model:a.model, requested_reasoning_effort:a.requested_reasoning_effort, response_reasoning_effort:a.response_reasoning_effort, status:a.status};
-            }
-          } catch (e) { evidence = {error:String(e)}; }
-          process.stdout.write('MUSE_CONFIG_PROBE run=' + process.env.RUN_ID + '\n\n' + JSON.stringify(evidence, null, 2));
-          NODE
-          gh api "repos/$REPO/issues/126/comments" -f body="$(cat /tmp/probe.txt)"
-
-  investigate:
-    needs: verify-config
-    strategy:
-      fail-fast: false
-      max-parallel: 8
-      matrix:
-        agent: [1,2,3,4,5,6,7,8]
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+        uses: actions/upload-artifact@v4
         with:
-          node-version: '22'
-      - name: Test Muse guardrails
-        run: node scripts/muse-agent/test.mjs
-      - name: Run read-only investigation
-        env:
-          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-          DISPATCH_TASK: ${{ github.event.inputs.task }}
-        run: |
-          BASE_TASK="$DISPATCH_TASK"
-          if [ -z "$BASE_TASK" ]; then BASE_TASK="$(cat .github/muse-task.txt)"; fi
-          case "${{ matrix.agent }}" in
-            1) FOCUS="INDEPENDENT DIAGNOSIS A. Independently trace one reproducible abrupt-grip/spinout scenario from tire slip kinematics through tire forces and chassis response. Do not read or infer other agents' conclusions. Required evidence: reproduction, code paths, causal chain, measurements/measurement plan, falsifier, smallest correction." ;;
-            2) FOCUS="INDEPENDENT DIAGNOSIS B. Independently investigate the same class of abrupt limit behavior, emphasizing pure/combined-slip force curves, peak/post-peak recovery, relaxation, and low-speed numerical transitions. Do not read or infer other agents' conclusions. Return the same required evidence." ;;
-            3) FOCUS="INDEPENDENT DIAGNOSIS C. Independently investigate the same class of abrupt limit behavior, emphasizing front/rear balance, transient yaw/sideslip, load transfer, throttle/lift/brake interactions, and timestep dependence. Do not read or infer other agents' conclusions. Return the same required evidence." ;;
-            4) FOCUS="CONFIGURATION AND INITIALIZATION. Audit tire parameters, units, defaults, front/rear assignments, startup determinism, reference loads, and any random/sampled startup state. Explicitly verify whether rear tire reference load is incorrectly sourced from the front and whether repeated identical starts can change grip. Treat both as hypotheses." ;;
-            5) FOCUS="STEERING AND ASSISTS. Audit keyboard and on-screen wheel paths, steering ratio, speed sensitivity, filters/slew, opposite-lock behavior, stability assists, ABS/TCS interactions, and whether controls create or mask abrupt handling. Separate digital from analog behavior." ;;
-            6) FOCUS="LOADS AND DRIVETRAIN. Audit per-wheel Fz, load sensitivity, suspension load transfer, differential/center coupling, torque distribution and signs. Look for discontinuities, force double-counting, axle unloading, or torque jumps that can upset corner balance." ;;
-            7) FOCUS="BASELINE AND AUTOMATED VALIDATION. Own the proposed shared harness only: map existing telemetry/tests to the 10 requested validation maneuvers, identify exact files that one implementation owner should touch later, define before/after metrics and acceptance criteria derived from baseline/reference behavior rather than arbitrary pass thresholds. Diagnosis only now." ;;
-            8) FOCUS="DRIVING ASSESSMENT. Determine what can and cannot be directly observed from the available environment. If browser interaction is unavailable, say so explicitly. Provide a repeatable keyboard + on-screen-wheel manual route, exact observable failure signatures, and telemetry that would distinguish understeer, rear rotation, snap-back, and control-path artifacts." ;;
-          esac
-          node scripts/muse-agent/run.mjs --task "Agent ${{ matrix.agent }} of 8. $FOCUS
-
-$BASE_TASK"
-      - name: Post investigation report
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          AGENT: ${{ matrix.agent }}
-        run: |
-          node <<'NODE' >/tmp/report.txt
-          const fs = require('node:fs');
-          const id = process.env.AGENT;
-          let payload = {error:'agent produced no artifact'};
-          try {
-            const file = fs.readdirSync('.muse/artifacts').filter(x => x.endsWith('.json')).sort().at(-1);
-            if (file) {
-              const a = JSON.parse(fs.readFileSync('.muse/artifacts/' + file, 'utf8'));
-              payload = {
-                model:a.model,
-                requested_reasoning_effort:a.requested_reasoning_effort,
-                response_reasoning_effort:a.response_reasoning_effort,
-                status:a.status,
-                task:a.task,
-                result:a.result
-              };
-            }
-          } catch (e) { payload = {error:String(e)}; }
-          let text = 'MUSE_TYRE_AGENT_' + id + ' run=' + process.env.RUN_ID + '\n\n' + JSON.stringify(payload, null, 2);
-          if (text.length > 62000) text = text.slice(0, 62000) + '\n[truncated]';
-          process.stdout.write(text);
-          NODE
-          gh api "repos/$REPO/issues/126/comments" -f body="$(cat /tmp/report.txt)"
+          name: muse-config-probe
+          path: .muse/artifacts/
+          if-no-files-found: warn
+          retention-days: 7
